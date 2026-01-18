@@ -110,6 +110,7 @@ export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_NUM_CTX=12288
+export OLLAMA_KEEP_ALIVE=-1  # Never unload model from VRAM
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
