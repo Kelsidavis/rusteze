@@ -126,7 +126,10 @@ extern "x86-interrupt" fn virtualization_handler(stack_frame: InterruptStackFram
 // Hardware interrupt handlers (IRQs)
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    // Timer tick - just send EOI for now
+    // Increment the tick counter
+    crate::pit::tick();
+
+    // Send EOI (End of Interrupt) to PIC1
     unsafe {
         x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(PIC_EOI);
     }
