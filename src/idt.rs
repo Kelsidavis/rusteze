@@ -145,6 +145,17 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     }
 }
 
+extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Use the mouse driver to process the packet byte
+    crate::ps2_mouse::mouse_interrupt_handler();
+
+    // Send EOI to both PICs (IRQ12 is on the slave PIC)
+    unsafe {
+        x86_64::instructions::port::Port::<u8>::new(PIC2_COMMAND).write(PIC_EOI);
+        x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(PIC_EOI);
+    }
+}
+
 // Static IDT using lazy_static
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
@@ -178,6 +189,7 @@ lazy_static! {
         // Hardware interrupts (IRQs remapped to 32-47)
         idt[PIC1_OFFSET].set_handler_fn(timer_interrupt_handler);      // IRQ0 - Timer
         idt[PIC1_OFFSET + 1].set_handler_fn(keyboard_interrupt_handler); // IRQ1 - Keyboard
+        idt[PIC2_OFFSET + 4].set_handler_fn(mouse_interrupt_handler);   // IRQ12 - Mouse
 
         idt
     };
@@ -209,9 +221,9 @@ pub fn init_pic() {
         x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0x01);
         x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0x01);
 
-        // Mask all interrupts except timer (IRQ0) and keyboard (IRQ1)
-        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0xFC); // 11111100 - enable IRQ0 and IRQ1
-        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0xFF); // Mask all slave interrupts
+        // Mask all interrupts except timer (IRQ0), keyboard (IRQ1), cascade (IRQ2), and mouse (IRQ12)
+        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0xF8); // 11111000 - enable IRQ0, IRQ1, IRQ2 (cascade)
+        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0xEF); // 11101111 - enable IRQ12 (mouse)
     }
 }
 

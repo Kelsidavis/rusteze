@@ -21,7 +21,7 @@
 
 ## Phase 3: Hardware Abstraction
 - [x] PS/2 keyboard driver with scancode translation
-- [ ] PS/2 mouse driver
+- [x] PS/2 mouse driver
 - [ ] PCI bus enumeration
 - [ ] ATA/IDE disk driver (PIO mode)
 
@@ -73,4 +73,4 @@ RUSTFLAGS="-D warnings" cargo build --release
 
 ## Current Status
 Phase: 3
-Next task: PS/2 mouse driver
+Next task: PCI bus enumeration
