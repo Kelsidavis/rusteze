@@ -10,7 +10,7 @@
 
 ## Phase 2: CPU & Memory Setup
 - [x] Global Descriptor Table (GDT)
-- [ ] Task State Segment (TSS)
+- [x] Task State Segment (TSS)
 - [ ] Interrupt Descriptor Table (IDT)
 - [ ] Exception handlers (page fault, double fault, etc.)
 - [ ] Programmable Interrupt Controller (PIC) setup
@@ -73,4 +73,4 @@ RUSTFLAGS="-D warnings" cargo build --release
 
 ## Current Status
 Phase: 2
-Next task: Task State Segment (TSS)
+Next task: Interrupt Descriptor Table (IDT)
