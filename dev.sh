@@ -49,9 +49,15 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Pre-load model into VRAM
+# Pre-load model into VRAM using API (more reliable than interactive mode)
 echo "Loading model into VRAM..."
-ollama run qwen3-30b-aider:latest "/bye" 2>/dev/null
+curl -s http://localhost:11434/api/generate -d '{
+  "model": "qwen3-30b-aider:latest",
+  "prompt": "hi",
+  "stream": false,
+  "options": {"num_predict": 1}
+}' >/dev/null 2>&1
+echo "Model loaded."
 echo ""
 
 SESSION=0
@@ -135,10 +141,15 @@ Use WHOLE edit format - output complete file contents.
             sleep 1
         done
 
-        # Load the model (this blocks until loaded)
+        # Load the model using API
         echo "Loading model into VRAM..."
-        ollama run qwen3-30b-aider:latest "/bye" 2>/dev/null
-        sleep 2
+        curl -s http://localhost:11434/api/generate -d '{
+          "model": "qwen3-30b-aider:latest",
+          "prompt": "hi",
+          "stream": false,
+          "options": {"num_predict": 1}
+        }' >/dev/null 2>&1
+        echo "Model loaded."
     fi
 
     COMMITS_AFTER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
