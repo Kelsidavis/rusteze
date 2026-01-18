@@ -13,6 +13,9 @@ mod pit; // Added PIT module
 mod physical_memory;  // Added memory manager
 mod paging;         // Added paging module
 
+// Import the PageSize trait for Size4KiB constant access
+use x86_64::structures::paging::{PageSize, PhysFrame};
+
 entry_point!(kernel_main);
 
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
