@@ -3,14 +3,98 @@
 
 cd "$(dirname "$0")"
 
+# === DEBUG / LOGGING ===
+DEBUG=1
+LOG_FILE="dev.log"
+START_TIME=$(date +%s)
+
+# Stats counters
+STAT_SESSIONS=0
+STAT_OLLAMA_RESTARTS=0
+STAT_MODEL_LOAD_FAILURES=0
+STAT_AIDER_TIMEOUTS=0
+STAT_AIDER_CRASHES=0
+STAT_HEALTH_CHECK_FAILURES=0
+STAT_BUILD_FAILURES=0
+STAT_HALLUCINATIONS=0
+STAT_STUCK_EVENTS=0
+STAT_CLAUDE_CALLS=0
+STAT_CLAUDE_HALLUCINATIONS=0
+STAT_REVERTS=0
+STAT_COMMITS=0
+
+# Log function - writes to file and optionally to stdout
+log() {
+    local level="$1"
+    shift
+    local msg="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local entry="[$timestamp] [$level] $msg"
+
+    if [ "$DEBUG" -eq 1 ]; then
+        echo "$entry" >> "$LOG_FILE"
+    fi
+}
+
+# Print summary stats
+print_stats() {
+    local end_time=$(date +%s)
+    local duration=$((end_time - START_TIME))
+    local hours=$((duration / 3600))
+    local minutes=$(((duration % 3600) / 60))
+
+    echo ""
+    echo "════════════════════════════════════════════════════════════"
+    echo "                    SESSION SUMMARY"
+    echo "════════════════════════════════════════════════════════════"
+    echo "Runtime: ${hours}h ${minutes}m"
+    echo "Sessions completed: $STAT_SESSIONS"
+    echo ""
+    echo "Issues encountered:"
+    echo "  Ollama restarts:        $STAT_OLLAMA_RESTARTS"
+    echo "  Model load failures:    $STAT_MODEL_LOAD_FAILURES"
+    echo "  Health check failures:  $STAT_HEALTH_CHECK_FAILURES"
+    echo "  Aider timeouts:         $STAT_AIDER_TIMEOUTS"
+    echo "  Aider crashes:          $STAT_AIDER_CRASHES"
+    echo "  Build failures:         $STAT_BUILD_FAILURES"
+    echo "  Hallucinations:         $STAT_HALLUCINATIONS"
+    echo "  Code reverts:           $STAT_REVERTS"
+    echo "  Stuck events:           $STAT_STUCK_EVENTS"
+    echo ""
+    echo "Claude escalations:"
+    echo "  Claude calls:           $STAT_CLAUDE_CALLS"
+    echo "  Claude hallucinations:  $STAT_CLAUDE_HALLUCINATIONS"
+    echo ""
+    echo "Progress:"
+    echo "  Commits made:           $STAT_COMMITS"
+    echo "════════════════════════════════════════════════════════════"
+
+    # Also log the summary
+    log "INFO" "=== SESSION SUMMARY ==="
+    log "INFO" "Runtime: ${hours}h ${minutes}m, Sessions: $STAT_SESSIONS"
+    log "INFO" "Ollama restarts: $STAT_OLLAMA_RESTARTS, Model failures: $STAT_MODEL_LOAD_FAILURES"
+    log "INFO" "Aider timeouts: $STAT_AIDER_TIMEOUTS, Aider crashes: $STAT_AIDER_CRASHES"
+    log "INFO" "Build failures: $STAT_BUILD_FAILURES, Reverts: $STAT_REVERTS"
+    log "INFO" "Stuck events: $STAT_STUCK_EVENTS, Claude calls: $STAT_CLAUDE_CALLS"
+    log "INFO" "Commits: $STAT_COMMITS"
+}
+
 # Cleanup on exit
 cleanup() {
     echo ""
     echo "Shutting down..."
+    log "INFO" "Shutdown requested"
+    print_stats
     pkill -9 -f "ollama" 2>/dev/null
     exit 0
 }
 trap cleanup SIGINT SIGTERM
+
+# Initialize log file
+echo "" >> "$LOG_FILE"
+log "INFO" "========================================"
+log "INFO" "dev.sh started"
+log "INFO" "========================================"
 
 # Use only the RTX 5080 (GPU 1)
 export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
@@ -20,6 +104,7 @@ export OLLAMA_NUM_CTX=12288
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
+echo "Log file: $LOG_FILE"
 echo ""
 
 # Kill any existing ollama/aider processes and reap zombies
@@ -73,6 +158,7 @@ load_model() {
 
     for attempt in $(seq 1 $max_attempts); do
         echo "Loading model into VRAM (attempt $attempt/$max_attempts)..."
+        log "INFO" "Model load attempt $attempt/$max_attempts"
 
         # Use timeout on curl to prevent hanging
         if timeout $timeout_secs curl -s http://localhost:11434/api/generate -d '{
@@ -82,11 +168,16 @@ load_model() {
           "options": {"num_predict": 1}
         }' >/dev/null 2>&1; then
             echo "Model loaded successfully."
+            log "INFO" "Model loaded successfully"
             return 0
         else
             echo "Model load failed or timed out."
+            log "WARN" "Model load failed/timed out (attempt $attempt)"
+            STAT_MODEL_LOAD_FAILURES=$((STAT_MODEL_LOAD_FAILURES + 1))
             if [ $attempt -lt $max_attempts ]; then
                 echo "Restarting ollama and retrying..."
+                log "INFO" "Restarting ollama for model load retry"
+                STAT_OLLAMA_RESTARTS=$((STAT_OLLAMA_RESTARTS + 1))
                 pkill -9 -f "ollama" 2>/dev/null
                 wait 2>/dev/null
                 sleep 2
@@ -104,6 +195,7 @@ load_model() {
     done
 
     echo "ERROR: Failed to load model after $max_attempts attempts"
+    log "ERROR" "Failed to load model after $max_attempts attempts"
     return 1
 }
 
@@ -115,6 +207,7 @@ check_ollama_health() {
 # Load the model
 if ! load_model; then
     echo "Could not load model. Exiting."
+    log "ERROR" "Initial model load failed, exiting"
     exit 1
 fi
 echo ""
@@ -124,12 +217,18 @@ STUCK_COUNT=0
 
 while true; do
     SESSION=$((SESSION + 1))
+    STAT_SESSIONS=$((STAT_SESSIONS + 1))
     COMMITS=$(git rev-list --count HEAD 2>/dev/null || echo "0")
     DONE=$(grep -c "\[x\]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
     TODO=$(grep -c "\[ \]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
 
     # Get next 3 unchecked items
     NEXT_TASKS=$(grep -m3 "\[ \]" AIDER_INSTRUCTIONS.md | sed 's/- \[ \] /  - /')
+    NEXT_TASK_ONELINE=$(echo "$NEXT_TASKS" | head -1 | sed 's/^[[:space:]]*//')
+
+    log "INFO" "--- Session $SESSION started ---"
+    log "INFO" "Task: $NEXT_TASK_ONELINE"
+    log "INFO" "Progress: Done=$DONE, Todo=$TODO"
 
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║ Session: $SESSION | $(date '+%Y-%m-%d %H:%M:%S')"
@@ -144,6 +243,8 @@ while true; do
 
     if echo "$BUILD_PRE_CHECK" | grep -q "^error"; then
         echo "⚠ Build has errors - telling aider to fix them first..."
+        log "WARN" "Build broken at session start"
+        STAT_BUILD_FAILURES=$((STAT_BUILD_FAILURES + 1))
         BUILD_STATUS_MSG="
 URGENT: The build is currently BROKEN. Fix these errors FIRST before doing anything else:
 
@@ -155,12 +256,16 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
 "
     else
         echo "✓ Build OK"
+        log "INFO" "Build OK at session start"
         BUILD_STATUS_MSG=""
     fi
 
     # Pre-flight check: ensure ollama is healthy before starting aider
     if ! check_ollama_health; then
         echo "⚠ Ollama not responding, restarting..."
+        log "WARN" "Health check failed, restarting ollama"
+        STAT_HEALTH_CHECK_FAILURES=$((STAT_HEALTH_CHECK_FAILURES + 1))
+        STAT_OLLAMA_RESTARTS=$((STAT_OLLAMA_RESTARTS + 1))
         pkill -9 -f "ollama" 2>/dev/null
         wait 2>/dev/null
         sleep 2
@@ -168,6 +273,7 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
         sleep 3
         if ! load_model; then
             echo "Failed to restart ollama, skipping this session..."
+            log "ERROR" "Failed to restart ollama, skipping session"
             sleep 5
             continue
         fi
@@ -175,6 +281,7 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
 
     # Let aider discover files via repo map instead of pre-loading
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
+    log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
         Cargo.toml \
@@ -206,18 +313,28 @@ Use WHOLE edit format - output complete file contents.
 "
 
     EXIT_CODE=$?
+    log "INFO" "Aider exited with code $EXIT_CODE"
 
     # If aider timed out (exit 124) or crashed, restart ollama to clear VRAM
     if [ $EXIT_CODE -eq 124 ]; then
         echo ""
         echo "⚠ Aider session timed out (15 min limit). Likely ollama hung."
         echo "Killing aider and restarting ollama..."
+        log "WARN" "Aider timed out (15 min limit)"
+        STAT_AIDER_TIMEOUTS=$((STAT_AIDER_TIMEOUTS + 1))
         pkill -9 -f "aider" 2>/dev/null
     fi
 
     if [ $EXIT_CODE -ne 0 ]; then
         echo ""
         echo "Aider exited with code $EXIT_CODE. Restarting ollama..."
+
+        if [ $EXIT_CODE -ne 124 ]; then
+            log "WARN" "Aider crashed with exit code $EXIT_CODE"
+            STAT_AIDER_CRASHES=$((STAT_AIDER_CRASHES + 1))
+        fi
+
+        STAT_OLLAMA_RESTARTS=$((STAT_OLLAMA_RESTARTS + 1))
 
         # Kill all ollama processes and reap zombies
         pkill -9 -f "ollama" 2>/dev/null
@@ -255,13 +372,19 @@ Use WHOLE edit format - output complete file contents.
     if [ "$DIRTY_FILES" -gt 0 ]; then
         echo ""
         echo "Detected uncommitted changes, testing if they compile..."
+        log "INFO" "Testing $DIRTY_FILES uncommitted files"
         if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
             echo "✓ Build passes! Auto-committing aider's work..."
+            log "INFO" "Uncommitted changes compile, auto-committing"
             git add -A
             git commit -m "Auto-commit: aider changes that compile"
             NEW_COMMITS=1
+            STAT_COMMITS=$((STAT_COMMITS + 1))
         else
             echo "✗ Build FAILS - reverting hallucinated/broken code..."
+            log "WARN" "Uncommitted changes don't compile, reverting (hallucination)"
+            STAT_HALLUCINATIONS=$((STAT_HALLUCINATIONS + 1))
+            STAT_REVERTS=$((STAT_REVERTS + 1))
             git checkout -- .
             git clean -fd 2>/dev/null
             echo "Reverted to last working state."
@@ -275,16 +398,21 @@ Use WHOLE edit format - output complete file contents.
         echo ""
         echo "Pushing to origin..."
         git push origin master
+        log "INFO" "Pushed $NEW_COMMITS commit(s)"
         STUCK_COUNT=0
     else
         STUCK_COUNT=$((STUCK_COUNT + 1))
+        STAT_STUCK_EVENTS=$((STAT_STUCK_EVENTS + 1))
         echo "No progress made (stuck count: $STUCK_COUNT)"
+        log "WARN" "No progress, stuck count: $STUCK_COUNT"
 
         if [ $STUCK_COUNT -ge 2 ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "Calling Claude Code for help..."
             echo "════════════════════════════════════════════════════════════"
+            log "INFO" "Escalating to Claude Code"
+            STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
             BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -50)
 
             # Snapshot file state before Claude runs
@@ -313,6 +441,7 @@ Please:
 Work autonomously until the task is complete.
 "
             CLAUDE_EXIT=$?
+            log "INFO" "Claude exited with code $CLAUDE_EXIT"
 
             # Verify Claude actually made changes (anti-hallucination check)
             FILES_AFTER=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
@@ -325,20 +454,27 @@ Work autonomously until the task is complete.
                 echo "⚠ Claude claimed to work but made NO actual changes!"
                 echo "  Files unchanged, no commits, no dirty files."
                 echo "  This was likely a hallucination. Continuing..."
+                log "WARN" "Claude hallucination - no actual changes made"
+                STAT_CLAUDE_HALLUCINATIONS=$((STAT_CLAUDE_HALLUCINATIONS + 1))
                 # Don't reset stuck count - let it try again or escalate
             else
                 echo ""
                 echo "✓ Claude made actual changes."
+                log "INFO" "Claude made actual changes"
                 # Check if changes compile
                 if [ "$DIRTY_AFTER" -gt 0 ]; then
                     echo "Testing uncommitted changes..."
                     if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
                         echo "✓ Build passes! Auto-committing Claude's work..."
+                        log "INFO" "Claude changes compile, auto-committing"
                         git add -A
                         git commit -m "Auto-commit: Claude Code changes that compile"
                         git push origin master
+                        STAT_COMMITS=$((STAT_COMMITS + 1))
                     else
                         echo "✗ Build FAILS - reverting Claude's broken code..."
+                        log "WARN" "Claude changes don't compile, reverting"
+                        STAT_REVERTS=$((STAT_REVERTS + 1))
                         git checkout -- .
                         git clean -fd 2>/dev/null
                     fi
@@ -352,9 +488,12 @@ Work autonomously until the task is complete.
     if [ $((SESSION % 5)) -eq 0 ] && [ $SESSION -gt 0 ]; then
         echo ""
         echo "Running periodic sanity check (session $SESSION)..."
+        log "INFO" "Periodic sanity check at session $SESSION"
         BUILD_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -50)
         if echo "$BUILD_CHECK" | grep -q "error"; then
             echo "⚠ Sanity check found build errors - calling Claude haiku to fix..."
+            log "WARN" "Sanity check failed, calling haiku"
+            STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
 
             # Run haiku non-interactively
             timeout 120 claude --print --dangerously-skip-permissions --model haiku "
@@ -369,26 +508,34 @@ Please fix any issues and ensure build passes. Be brief.
             if [ "$DIRTY_HAIKU" -gt 0 ]; then
                 if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
                     echo "✓ Haiku fixed the build!"
+                    log "INFO" "Haiku fixed the build"
                     git add -A
                     git commit -m "Auto-commit: Claude haiku build fix"
                     git push origin master
+                    STAT_COMMITS=$((STAT_COMMITS + 1))
                 else
                     echo "✗ Haiku's fix didn't work - reverting..."
+                    log "WARN" "Haiku fix failed, reverting"
+                    STAT_REVERTS=$((STAT_REVERTS + 1))
                     git checkout -- .
                     git clean -fd 2>/dev/null
                 fi
             fi
         else
             echo "✓ Sanity check passed - build OK"
+            log "INFO" "Sanity check passed"
         fi
     fi
 
     # Only restart if there's more work to do
     if [ "$TODO" -eq 0 ]; then
         echo "All tasks complete!"
+        log "INFO" "All tasks complete!"
         break
     fi
 
     echo ""
     sleep 1
 done
+
+print_stats
