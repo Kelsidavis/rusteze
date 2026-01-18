@@ -22,17 +22,34 @@ echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
 echo ""
 
-# Kill any zombie ollama processes before starting
-echo "Cleaning up any existing ollama processes..."
+# Kill any existing ollama/aider processes and reap zombies
+echo "Cleaning up any existing processes..."
 pkill -9 -f "ollama" 2>/dev/null
-sleep 2
+pkill -9 -f "aider" 2>/dev/null
 
-# Verify they're dead
-while pgrep -f "ollama" >/dev/null 2>&1; do
-    echo "Waiting for ollama processes to terminate..."
+# Reap any zombie children from this shell
+wait 2>/dev/null
+
+# Wait for live (non-zombie) processes to die
+for i in {1..10}; do
+    # Count non-zombie ollama processes
+    LIVE_OLLAMA=$(pgrep -f "ollama" | xargs -r ps -o pid=,state= -p 2>/dev/null | grep -v " Z" | wc -l)
+    if [ "$LIVE_OLLAMA" -eq 0 ]; then
+        break
+    fi
+    echo "Waiting for $LIVE_OLLAMA ollama process(es) to terminate..."
     pkill -9 -f "ollama" 2>/dev/null
     sleep 1
 done
+
+# Orphan any remaining zombies by killing their parent shells (stopped dev.sh instances)
+ZOMBIE_COUNT=$(ps aux | grep -E 'ollama|aider' | grep ' Z ' | wc -l)
+if [ "$ZOMBIE_COUNT" -gt 0 ]; then
+    echo "Cleaning up $ZOMBIE_COUNT zombie process(es)..."
+    # Kill any stopped dev.sh processes (state T) which are holding zombies
+    ps aux | grep 'dev.sh' | grep ' T ' | awk '{print $2}' | xargs -r kill -9 2>/dev/null
+    sleep 1
+fi
 
 # Start fresh ollama instance
 echo "Starting ollama..."
@@ -116,13 +133,16 @@ Use WHOLE edit format - output complete file contents.
         echo ""
         echo "Aider exited with error ($EXIT_CODE). Restarting ollama..."
 
-        # Kill all ollama processes and wait for them to die
+        # Kill all ollama processes and reap zombies
         pkill -9 -f "ollama" 2>/dev/null
-        sleep 2
+        wait 2>/dev/null
+        sleep 1
 
-        # Verify they're dead
-        while pgrep -f "ollama" >/dev/null 2>&1; do
-            echo "Waiting for ollama processes to terminate..."
+        # Wait for live processes to die (max 10 seconds)
+        for i in {1..10}; do
+            LIVE_OLLAMA=$(pgrep -f "ollama" | xargs -r ps -o pid=,state= -p 2>/dev/null | grep -v " Z" | wc -l)
+            [ "$LIVE_OLLAMA" -eq 0 ] && break
+            echo "Waiting for $LIVE_OLLAMA ollama process(es)..."
             pkill -9 -f "ollama" 2>/dev/null
             sleep 1
         done
