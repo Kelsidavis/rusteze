@@ -16,6 +16,7 @@ mod physical_memory;
 mod paging;
 mod heap;
 mod keyboard;
+mod ps2_mouse; // Added mouse module
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -84,6 +85,10 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     keyboard::init_keyboard();
     println!("PS/2 keyboard driver initialized");
 
+    // Initialize the PS/2 mouse driver
+    ps2_mouse::init_mouse();
+    println!("PS/2 mouse driver initialized");
+    
     // Enable hardware interrupts
     idt::enable_interrupts();
     println!("Hardware interrupts enabled");
