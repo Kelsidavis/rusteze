@@ -3,6 +3,12 @@
 
 cd /home/k/Desktop/aider/rusteze
 
+# Use only the RTX 5080 (GPU 1)
+export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_KV_CACHE_TYPE=q8_0
+export OLLAMA_NUM_CTX=12288
+
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
 echo ""
@@ -61,7 +67,7 @@ Use WHOLE edit format - output complete file contents.
         echo "Aider exited with error ($EXIT_CODE). Restarting ollama..."
         pkill -9 -f "ollama"
         sleep 5
-        ollama serve &>/dev/null &
+        CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 OLLAMA_NUM_CTX=12288 ollama serve &>/dev/null &
         sleep 3
 
         # Wait for ollama to be ready

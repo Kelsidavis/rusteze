@@ -5,7 +5,7 @@
 - [x] Basic kernel that compiles
 - [x] VGA text mode driver (80x25, 16 colors)
 - [x] println! macro for kernel output
-- [ ] Serial port driver (COM1) for debug output
+- [x] Serial port driver (COM1) for debug output
 - [x] Panic handler with message display
 
 ## Phase 2: CPU & Memory Setup
@@ -72,5 +72,5 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-Phase: 1
-Next task: Serial port driver (COM1) for debug output
+Phase: 2
+Next task: Global Descriptor Table (GDT)
