@@ -7,6 +7,7 @@ use core::panic::PanicInfo;
 mod vga;
 mod serial;
 mod gdt;  // This was missing - now added to import the module
+mod idt;  // Added IDT module
 
 entry_point!(kernel_main);
 
@@ -14,6 +15,15 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Initialize GDT before anything else
     unsafe { 
         gdt::init_gdt();
+        
+        // Initialize PIC and set up interrupt handlers  
+        idt::init_pic(); 
+        
+        // Load the IDT after setting all handler functions
+        let mut idt = idt::Idt::new();
+        idt.initialize();
+
+        // Set global pointer to our initialized IDT for use in other modules
     }
 
     vga::WRITER.lock().clear_screen();
@@ -33,6 +43,9 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    // Print the error message to both serial and console
+    let mut writer = vga::WRITER.lock();
+    
     println!("KERNEL PANIC: {}", info);
     serial_println!("KERNEL PANIC: {}", info);
 
