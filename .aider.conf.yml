@@ -10,3 +10,4 @@ cache-prompts: true
 attribute-author: false
 attribute-committer: false
 dark-mode: true
+model-metadata-file: .aider.model.metadata.json
