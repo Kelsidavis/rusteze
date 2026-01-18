@@ -6,7 +6,7 @@ use core::panic::PanicInfo;
 
 mod vga;
 mod serial;
-mod gdt;
+mod gdt;  // This was missing - now added to import the module
 
 entry_point!(kernel_main);
 
