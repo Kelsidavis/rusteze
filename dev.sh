@@ -552,7 +552,7 @@ Please fix any issues and ensure build passes. Be brief.
         INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
         timeout 600 claude --print --dangerously-skip-permissions "
-You are the strategic planner for this RustOS kernel project.
+You are the visionary architect and strategic planner for RustOS - a hobby OS kernel written in Rust.
 
 SESSION STATS:
 - Sessions completed: $SESSION
@@ -565,31 +565,42 @@ $RECENT_COMMITS
 RECENTLY COMPLETED TASKS:
 $COMPLETED_TASKS
 
-REMAINING TASKS:
+CURRENT REMAINING TASKS:
 $REMAINING_TASKS
 
 CURRENT CODE STRUCTURE:
 $CODE_STRUCTURE
 
-YOUR MISSION:
-1. Review the overall progress and architecture
-2. Assess if the roadmap priorities are still correct
-3. Identify any missing tasks or dependencies
-4. Consider if any tasks should be reordered or broken down
-5. Update AIDER_INSTRUCTIONS.md with:
-   - Any new tasks that should be added
-   - Reordering if needed (most important/blocking tasks first)
-   - Brief notes on architectural decisions if helpful
-   - Keep the same checkbox format: - [ ] for todo, - [x] for done
+YOUR MISSION - EVOLVE THE VISION:
 
-IMPORTANT:
-- Keep the roadmap focused and achievable
-- Prioritize tasks that unblock other work
-- Add implementation hints for complex tasks
-- Don't remove completed [x] tasks (they're history)
-- Be concise - this is a working document, not documentation
+1. CELEBRATE PROGRESS: Review what's been accomplished and how the OS is taking shape
 
-After updating, commit with message: 'docs: planning session - roadmap update'
+2. EXPAND THE ROADMAP: The roadmap should always be growing. Add new features that would make this a more capable, interesting OS:
+   - What's the next logical capability after current tasks?
+   - What would make this OS unique or impressive?
+   - Consider: filesystems, networking, graphics, shell, userspace programs
+   - Think about what features would be fun to implement and demo
+
+3. REFINE PRIORITIES: Reorder tasks so the most impactful/unblocking work comes first
+
+4. ADD DETAIL: For complex upcoming tasks, add implementation hints or break them into subtasks
+
+5. MAINTAIN VISION: Keep a 'Vision' or 'Goals' section at the top describing what this OS is becoming
+
+UPDATE AIDER_INSTRUCTIONS.md:
+- Add 3-5 NEW tasks beyond what's currently listed (always be expanding)
+- Reorder if needed (dependencies first, then high-impact features)
+- Add brief implementation hints for tricky tasks
+- Keep checkbox format: - [ ] todo, - [x] done
+- Group related tasks under phase headings
+
+PHILOSOPHY:
+- This OS should keep getting more capable and interesting
+- Each planning session should leave the roadmap MORE ambitious, not less
+- Balance achievable near-term tasks with exciting longer-term goals
+- The local AI (aider) works best with clear, specific tasks
+
+After updating, commit with message: 'docs: planning session - expand roadmap'
 "
         PLANNING_EXIT=$?
         log "INFO" "Planning session exited with code $PLANNING_EXIT"
@@ -604,10 +615,10 @@ After updating, commit with message: 'docs: planning session - roadmap update'
             DIRTY_PLAN=$(git status --porcelain AIDER_INSTRUCTIONS.md 2>/dev/null | wc -l)
             if [ "$DIRTY_PLAN" -gt 0 ]; then
                 git add AIDER_INSTRUCTIONS.md
-                git commit -m "docs: planning session - roadmap update (session $SESSION)"
+                git commit -m "docs: planning session - expand roadmap (session $SESSION)"
                 git push origin master
                 STAT_COMMITS=$((STAT_COMMITS + 1))
-                log "INFO" "Committed roadmap update"
+                log "INFO" "Committed roadmap expansion"
             fi
         else
             echo "Roadmap unchanged (planning found no updates needed)"
