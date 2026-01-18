@@ -3,11 +3,12 @@ edit-format: whole
 yes-always: true
 auto-commits: true
 auto-test: false
-suggest-shell-commands: true
-map-tokens: 1024
-max-chat-history-tokens: 2048
+suggest-shell-commands: false
+map-tokens: 512
+max-chat-history-tokens: 1024
 cache-prompts: true
 attribute-author: false
 attribute-committer: false
 dark-mode: true
 model-metadata-file: .aider.model.metadata.json
+subtree-only: true
