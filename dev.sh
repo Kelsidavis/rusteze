@@ -20,8 +20,12 @@ STAT_HALLUCINATIONS=0
 STAT_STUCK_EVENTS=0
 STAT_CLAUDE_CALLS=0
 STAT_CLAUDE_HALLUCINATIONS=0
+STAT_PLANNING_SESSIONS=0
 STAT_REVERTS=0
 STAT_COMMITS=0
+
+# Configuration
+PLANNING_INTERVAL=10  # Run planning session every N sessions
 
 # Log function - writes to file and optionally to stdout
 log() {
@@ -61,9 +65,10 @@ print_stats() {
     echo "  Code reverts:           $STAT_REVERTS"
     echo "  Stuck events:           $STAT_STUCK_EVENTS"
     echo ""
-    echo "Claude escalations:"
+    echo "Claude usage:"
     echo "  Claude calls:           $STAT_CLAUDE_CALLS"
     echo "  Claude hallucinations:  $STAT_CLAUDE_HALLUCINATIONS"
+    echo "  Planning sessions:      $STAT_PLANNING_SESSIONS"
     echo ""
     echo "Progress:"
     echo "  Commits made:           $STAT_COMMITS"
@@ -524,6 +529,89 @@ Please fix any issues and ensure build passes. Be brief.
         else
             echo "✓ Sanity check passed - build OK"
             log "INFO" "Sanity check passed"
+        fi
+    fi
+
+    # Strategic planning session every N sessions (uses Opus for high-level thinking)
+    if [ $((SESSION % PLANNING_INTERVAL)) -eq 0 ] && [ $SESSION -gt 0 ]; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║           STRATEGIC PLANNING SESSION                       ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        log "INFO" "Starting planning session at session $SESSION"
+        STAT_PLANNING_SESSIONS=$((STAT_PLANNING_SESSIONS + 1))
+        STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
+
+        # Gather context for planning
+        COMPLETED_TASKS=$(grep "\[x\]" AIDER_INSTRUCTIONS.md | tail -10)
+        REMAINING_TASKS=$(grep "\[ \]" AIDER_INSTRUCTIONS.md)
+        RECENT_COMMITS=$(git log --oneline -10 2>/dev/null)
+        CODE_STRUCTURE=$(find src -name "*.rs" -type f 2>/dev/null | head -20)
+
+        # Snapshot before planning
+        INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+
+        timeout 600 claude --print --dangerously-skip-permissions "
+You are the strategic planner for this RustOS kernel project.
+
+SESSION STATS:
+- Sessions completed: $SESSION
+- Tasks done: $DONE
+- Tasks remaining: $TODO
+
+RECENT PROGRESS (last 10 commits):
+$RECENT_COMMITS
+
+RECENTLY COMPLETED TASKS:
+$COMPLETED_TASKS
+
+REMAINING TASKS:
+$REMAINING_TASKS
+
+CURRENT CODE STRUCTURE:
+$CODE_STRUCTURE
+
+YOUR MISSION:
+1. Review the overall progress and architecture
+2. Assess if the roadmap priorities are still correct
+3. Identify any missing tasks or dependencies
+4. Consider if any tasks should be reordered or broken down
+5. Update AIDER_INSTRUCTIONS.md with:
+   - Any new tasks that should be added
+   - Reordering if needed (most important/blocking tasks first)
+   - Brief notes on architectural decisions if helpful
+   - Keep the same checkbox format: - [ ] for todo, - [x] for done
+
+IMPORTANT:
+- Keep the roadmap focused and achievable
+- Prioritize tasks that unblock other work
+- Add implementation hints for complex tasks
+- Don't remove completed [x] tasks (they're history)
+- Be concise - this is a working document, not documentation
+
+After updating, commit with message: 'docs: planning session - roadmap update'
+"
+        PLANNING_EXIT=$?
+        log "INFO" "Planning session exited with code $PLANNING_EXIT"
+
+        # Check if roadmap was updated
+        INSTRUCTIONS_AFTER=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+        if [ "$INSTRUCTIONS_BEFORE" != "$INSTRUCTIONS_AFTER" ]; then
+            echo "✓ Roadmap updated by planning session"
+            log "INFO" "Roadmap was updated by planning session"
+
+            # Commit if not already committed
+            DIRTY_PLAN=$(git status --porcelain AIDER_INSTRUCTIONS.md 2>/dev/null | wc -l)
+            if [ "$DIRTY_PLAN" -gt 0 ]; then
+                git add AIDER_INSTRUCTIONS.md
+                git commit -m "docs: planning session - roadmap update (session $SESSION)"
+                git push origin master
+                STAT_COMMITS=$((STAT_COMMITS + 1))
+                log "INFO" "Committed roadmap update"
+            fi
+        else
+            echo "Roadmap unchanged (planning found no updates needed)"
+            log "INFO" "Planning session made no roadmap changes"
         fi
     fi
 
