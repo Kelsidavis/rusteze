@@ -55,6 +55,20 @@ Use WHOLE edit format - output complete file contents.
 
     EXIT_CODE=$?
 
+    # If aider crashed (non-zero exit), restart ollama to clear VRAM
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo ""
+        echo "Aider exited with error ($EXIT_CODE). Restarting ollama..."
+        pkill -f "ollama serve"
+        sleep 3
+        ollama serve &>/dev/null &
+        sleep 5
+        # Warm up the model
+        echo "Warming up model..."
+        curl -s http://localhost:11434/api/generate -d '{"model":"qwen3-30b-aider:latest","prompt":"hi","stream":false}' > /dev/null 2>&1
+        sleep 2
+    fi
+
     COMMITS_AFTER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
     NEW_COMMITS=$((COMMITS_AFTER - COMMITS))
 
