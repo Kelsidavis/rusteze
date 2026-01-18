@@ -9,7 +9,7 @@
 - [x] Panic handler with message display
 
 ## Phase 2: CPU & Memory Setup
-- [ ] Global Descriptor Table (GDT)
+- [x] Global Descriptor Table (GDT)
 - [ ] Task State Segment (TSS)
 - [ ] Interrupt Descriptor Table (IDT)
 - [ ] Exception handlers (page fault, double fault, etc.)
@@ -73,4 +73,4 @@ RUSTFLAGS="-D warnings" cargo build --release
 
 ## Current Status
 Phase: 2
-Next task: Global Descriptor Table (GDT)
+Next task: Task State Segment (TSS)
