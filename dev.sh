@@ -31,12 +31,15 @@ while true; do
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
-    # Find all .rs files and add them
-    RS_FILES=$(find src -name "*.rs" 2>/dev/null | tr '\n' ' ')
-
-    aider $RS_FILES \
+    # Don't pre-load all source files - causes context overflow
+    # Let aider discover files via repo map instead
+    aider \
         AIDER_INSTRUCTIONS.md \
         Cargo.toml \
+        --no-stream \
+        --yes \
+        --map-tokens 1024 \
+        --max-chat-history-tokens 2048 \
         --message "
 Read AIDER_INSTRUCTIONS.md. Work through unchecked [ ] items.
 
