@@ -93,15 +93,27 @@ Use WHOLE edit format - output complete file contents.
     if [ $EXIT_CODE -ne 0 ]; then
         echo ""
         echo "Aider exited with error ($EXIT_CODE). Restarting ollama..."
-        pkill -9 -f "ollama"
-        sleep 5
-        CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 OLLAMA_NUM_CTX=12288 ollama serve &>/dev/null &
+
+        # Kill all ollama processes and wait for them to die
+        pkill -9 -f "ollama" 2>/dev/null
+        sleep 2
+
+        # Verify they're dead
+        while pgrep -f "ollama" >/dev/null 2>&1; do
+            echo "Waiting for ollama processes to terminate..."
+            pkill -9 -f "ollama" 2>/dev/null
+            sleep 1
+        done
+
+        # Start fresh instance
+        ollama serve &>/dev/null &
         sleep 3
 
         # Wait for ollama to be ready
         echo "Waiting for ollama..."
         for i in {1..30}; do
             if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+                echo "Ollama is ready."
                 break
             fi
             sleep 1
