@@ -18,6 +18,7 @@ mod heap;
 mod keyboard;
 mod ps2_mouse; // Added mouse module
 mod pci;  // New PCI enumeration module
+mod ata;  // ATA/IDE disk driver
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -149,8 +150,40 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
         println!("No PCI devices found");
     }
 
+    // Initialize ATA/IDE disk driver
+    let ata_disks = ata::init_ata();
+    
+    if !ata_disks.is_empty() {
+        for (i, disk) in ata_disks.iter().enumerate() {
+            match disk.init() {
+                Ok(info) => println!("ATA Disk {}: Model '{}', Serial '{}' ({})", 
+                    i + 1,
+                    info.model_name().unwrap_or("Unknown"),
+                    info.serial_number_str().unwrap_or("Unknown"),
+                    if (info.device_type & 0x4) == 0 { "Fixed" } else { "Removable" }),
+                Err(_) => println!("ATA Disk {}: Failed to initialize", i + 1),
+            }
+        }
+
+        // Test reading a sector from the first disk
+        let test_lba = 256;
+        
+        if !ata_disks.is_empty() {
+            match ata_disks[0].read_sector(test_lba) {
+                Ok(data) => println!("Successfully read LBA {} (first 16 bytes: {:?})", 
+                    test_lba, &data[..16]),
+                Err(e) => println!("Failed to read from ATA disk at LBA {}: {}", test_lba, e),
+            }
+        } else {
+            println!("No ATA disks available for testing");
+        }
+
+    } else {
+        println!("No ATA/IDE devices found.");
+    }
+
     // Mark the task as complete
-    println!("PCI bus enumeration completed successfully");
+    println!("ATA/IDE driver (PIO mode) initialized successfully");
 
     println!("RustOS ready!");
 
