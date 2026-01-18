@@ -23,7 +23,7 @@
 - [x] PS/2 keyboard driver with scancode translation
 - [x] PS/2 mouse driver
 - [x] PCI bus enumeration
-- [ ] ATA/IDE disk driver (PIO mode)
+- [x] ATA/IDE disk driver (PIO mode)
 
 ## Phase 4: Process Management
 - [ ] Process Control Block (PCB) structure
@@ -72,5 +72,5 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-Phase: 3
-Next task: ATA/IDE disk driver (PIO mode)
+Phase: 4
+Next task: Process Control Block (PCB) structure

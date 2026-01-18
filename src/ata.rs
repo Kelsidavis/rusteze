@@ -1,12 +1,15 @@
 // src/ata.rs
 
 use crate::println;
-use x86_64::{instructions::port::Port, structures::paging::PhysFrame};
-use core::ptr;
+use x86_64::instructions::port::Port;
+use alloc::vec::Vec;
+use alloc::vec;
 
 /// Primary IDE channel base port addresses (for master and slave)
 const PRIMARY_DATA_PORT: u16 = 0x1F0;
+#[allow(dead_code)]
 const PRIMARY_ERROR_PORT: u16 = 0x1F1; // Read-only
+#[allow(dead_code)]
 const PRIMARY_FEATURES_PORT: u16 = 0x1F2; // Write-only, for error recovery features (not used)
 const PRIMARY_SECTOR_COUNT_PORT: u16 = 0x1F3;
 const PRIMARY_LBA_LOW_PORT: u16 = 0x1F4;
@@ -16,7 +19,9 @@ const PRIMARY_COMMAND_PORT: u16 = 0x1F7;
 
 /// Secondary IDE channel base port addresses (for master and slave)
 const SECONDARY_DATA_PORT: u16 = 0x170;
+#[allow(dead_code)]
 const SECONDARY_ERROR_PORT: u16 = 0x171; // Read-only
+#[allow(dead_code)]
 const SECONDARY_FEATURES_PORT: u16 = 0x172; // Write-only, for error recovery features (not used)
 const SECONDARY_SECTOR_COUNT_PORT: u16 = 0x173;
 const SECONDARY_LBA_LOW_PORT: u16 = 0x174;
@@ -35,15 +40,22 @@ enum AtaCommand {
 // Status register bits
 const STATUS_BSY: u8 = 1 << 7; // Busy bit (set when device is busy)
 const STATUS_DRDY: u8 = 1 << 6; // Device ready bit
+#[allow(dead_code)]
 const STATUS_DF: u8 = 1 << 5; // Drive fault error flag
+#[allow(dead_code)]
 const STATUS_DSC: u8 = 1 << 4; // Seek complete - not used in PIO mode
 const STATUS_DRQ: u8 = 1 << 3; // Data request (device ready to transfer data)
+#[allow(dead_code)]
 const STATUS_CORR: u8 = 1 << 2; // Corrected error bit
+#[allow(dead_code)]
 const STATUS_IDX: u8 = 1 << 1; // Index - not used in PIO mode
+#[allow(dead_code)]
 const STATUS_ERR: u8 = 1 << 0; // Error flag
 
 // Device select bits (in LBA_HIGH_PORT)
+#[allow(dead_code)]
 const DEVICE_MASTER: u8 = 0x00;
+#[allow(dead_code)]
 const DEVICE_SLAVE: u8 = 0x10;
 
 /// ATA/IDE device structure to represent a disk
@@ -69,14 +81,14 @@ impl AtaDisk {
         });
 
         // Send the IDENTIFY command (0xEC)
-        unsafe { 
+        unsafe {
             port.write(AtaCommand::IdentifyDevice as u8);
         }
 
         // Wait for DRQ bit to be set, indicating data is ready
         self.wait_for_drq()?;
 
-        let mut info = AtaDeviceIdentifyInfo {
+        let info = AtaDeviceIdentifyInfo {
             device_type: 0,
             sectors_per_track: 0,
             heads: 0,
@@ -86,19 +98,11 @@ impl AtaDisk {
             firmware_revision: [0; 9],
         };
 
-        // Read the identify data (512 bytes = 256 words)
-        let mut buffer_ptr = info as *mut AtaDeviceIdentifyInfo;
-        
-        for i in 0..=255 {
-            unsafe { 
-                ptr::write_volatile(
-                    &mut (*buffer_ptr).model_number[i] as *mut u8,
-                    self.read_word()?,
-                );
-                
-                // Skip the word we just read
-                let _ = self.read_word()?;
-            }
+        // Read the identify data (512 bytes = 256 words) and discard it
+        // Since we're not parsing the actual IDENTIFY data structure,
+        // we'll just read and discard the data to clear the buffer
+        for _i in 0..256 {
+            let _ = self.read_word()?;
         }
 
         Ok(info)
@@ -107,15 +111,15 @@ impl AtaDisk {
     /// Wait for device to be ready (not busy and DRDY set).
     fn wait_for_ready(&self) -> Result<(), &'static str> {
         loop {
-            match unsafe { 
+            let status: u8 = unsafe {
                 Port::new(match self.channel {
                     Channel::Primary => PRIMARY_COMMAND_PORT,
                     Channel::Secondary => SECONDARY_COMMAND_PORT,
                 }).read()
-            } & (STATUS_BSY | STATUS_DRDY)
-            {
-                0x40 => break, // DRDY set and not busy
-                _ => continue,
+            };
+
+            if (status & (STATUS_BSY | STATUS_DRDY)) == STATUS_DRDY {
+                break; // DRDY set and not busy
             }
         }
 
@@ -125,7 +129,7 @@ impl AtaDisk {
     /// Wait for the device to be ready to transfer data.
     fn wait_for_drq(&self) -> Result<(), &'static str> {
         loop {
-            let status = unsafe { 
+            let status: u8 = unsafe {
                 Port::new(match self.channel {
                     Channel::Primary => PRIMARY_COMMAND_PORT,
                     Channel::Secondary => SECONDARY_COMMAND_PORT,
@@ -142,12 +146,12 @@ impl AtaDisk {
 
     /// Read a word from the data port.
     fn read_word(&self) -> Result<u16, &'static str> {
-        let mut port = Port::new(match self.channel {
+        let mut port: Port<u16> = Port::new(match self.channel {
             Channel::Primary => PRIMARY_DATA_PORT,
             Channel::Secondary => SECONDARY_DATA_PORT,
         });
 
-        unsafe { 
+        unsafe {
             Ok(port.read())
         }
     }
@@ -157,145 +161,118 @@ impl AtaDisk {
         // Wait for device to be ready
         self.wait_for_ready()?;
 
-        let mut port = Port::new(match self.channel {
+        let mut command_port: Port<u8> = Port::new(match self.channel {
             Channel::Primary => PRIMARY_COMMAND_PORT,
             Channel::Secondary => SECONDARY_COMMAND_PORT,
         });
 
-        unsafe { 
+        unsafe {
             // Set up the LBA address (28 bits)
-            port.write(0x40 | if self.is_slave { 1 } else { 0 }); // Device select + LBA mode
-            let lba_bytes = [
-                ((lba >> 24) & 0xFF) as u8,
-                ((lba >> 16) & 0xFF) as u8,
-                ((lba >> 8) & 0xFF) as u8,
-                (lba & 0xFF) as u8
-            ];
-            
-            // Write LBA bits to the appropriate ports in order
-            Port::new(match self.channel {
-                Channel::Primary => PRIMARY_LBA_LOW_PORT,
-                Channel::Secondary => SECONDARY_LBA_LOW_PORT,
-            }).write(lba_bytes[3]);
-                
-            Port::new(match self.channel {
-                Channel::Primary => PRIMARY_LBA_MID_PORT,
-                Channel::Secondary => SECONDARY_LBA_MID_PORT,
-            }).write(lba_bytes[2]);
-
-            Port::new(match self.channel {
+            Port::<u8>::new(match self.channel {
                 Channel::Primary => PRIMARY_LBA_HIGH_PORT,
                 Channel::Secondary => SECONDARY_LBA_HIGH_PORT,
-            }).write(lba_bytes[1] | (lba_bytes[0] & 0x0F) << 4);
+            }).write(0x40 | if self.is_slave { 0x10 } else { 0x00 } | ((lba >> 24) & 0x0F) as u8);
+
+            // Write LBA bits to the appropriate ports in order
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_LOW_PORT,
+                Channel::Secondary => SECONDARY_LBA_LOW_PORT,
+            }).write((lba & 0xFF) as u8);
+
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_MID_PORT,
+                Channel::Secondary => SECONDARY_LBA_MID_PORT,
+            }).write(((lba >> 8) & 0xFF) as u8);
+
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_HIGH_PORT,
+                Channel::Secondary => SECONDARY_LBA_HIGH_PORT,
+            }).write(((lba >> 16) & 0xFF) as u8 | 0x40 | if self.is_slave { 0x10 } else { 0x00 });
 
             // Set sector count to 1
-            Port::new(match self.channel {
+            Port::<u8>::new(match self.channel {
                 Channel::Primary => PRIMARY_SECTOR_COUNT_PORT,
                 Channel::Secondary => SECONDARY_SECTOR_COUNT_PORT,
             }).write(1);
         }
 
         // Send the READ SECTORS command (0x20)
-        unsafe { 
-            port.write(AtaCommand::ReadSectorsWithRetry as u8);
+        unsafe {
+            command_port.write(AtaCommand::ReadSectorsWithRetry as u8);
         }
 
         self.wait_for_drq()?;
 
         let mut buffer = [0u8; 512];
-        
-        for i in 0..=255 {
-            // Read a word from the data port
-            unsafe { 
-                ptr::write_volatile(
-                    &mut buffer[i * 2] as *mut u8,
-                    Port::new(match self.channel {
-                        Channel::Primary => PRIMARY_DATA_PORT,
-                        Channel::Secondary => SECONDARY_DATA_PORT,
-                    }).read() as u8,
-                );
-                
-                // Skip the word we just read
-                let _ = Port::new(match self.channel {
-                    Channel::Primary => PRIMARY_DATA_PORT,
-                    Channel::Secondary => SECONDARY_DATA_PORT,
-                }).read();
-            }
+
+        // Read 256 words (512 bytes)
+        for i in 0..256 {
+            let word = self.read_word()?;
+            buffer[i * 2] = (word & 0xFF) as u8;
+            buffer[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
         }
 
         Ok(buffer)
     }
 
     /// Write a sector to the disk using LBA addressing.
+    #[allow(dead_code)]
     pub fn write_sector(&self, lba: u64, data: &[u8; 512]) -> Result<(), &'static str> {
         // Wait for device to be ready
         self.wait_for_ready()?;
 
-        let mut port = Port::new(match self.channel {
+        let mut command_port: Port<u8> = Port::new(match self.channel {
             Channel::Primary => PRIMARY_COMMAND_PORT,
             Channel::Secondary => SECONDARY_COMMAND_PORT,
         });
 
-        unsafe { 
+        unsafe {
             // Set up the LBA address (28 bits)
-            port.write(0x40 | if self.is_slave { 1 } else { 0 }); // Device select + LBA mode
-            let lba_bytes = [
-                ((lba >> 24) & 0xFF) as u8,
-                ((lba >> 16) & 0xFF) as u8,
-                ((lba >> 8) & 0xFF) as u8,
-                (lba & 0xFF) as u8
-            ];
-            
-            // Write LBA bits to the appropriate ports in order
-            Port::new(match self.channel {
-                Channel::Primary => PRIMARY_LBA_LOW_PORT,
-                Channel::Secondary => SECONDARY_LBA_LOW_PORT,
-            }).write(lba_bytes[3]);
-                
-            Port::new(match self.channel {
-                Channel::Primary => PRIMARY_LBA_MID_PORT,
-                Channel::Secondary => SECONDARY_LBA_MID_PORT,
-            }).write(lba_bytes[2]);
-
-            Port::new(match self.channel {
+            Port::<u8>::new(match self.channel {
                 Channel::Primary => PRIMARY_LBA_HIGH_PORT,
                 Channel::Secondary => SECONDARY_LBA_HIGH_PORT,
-            }).write(lba_bytes[1] | (lba_bytes[0] & 0x0F) << 4);
+            }).write(0x40 | if self.is_slave { 0x10 } else { 0x00 } | ((lba >> 24) & 0x0F) as u8);
+
+            // Write LBA bits to the appropriate ports in order
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_LOW_PORT,
+                Channel::Secondary => SECONDARY_LBA_LOW_PORT,
+            }).write((lba & 0xFF) as u8);
+
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_MID_PORT,
+                Channel::Secondary => SECONDARY_LBA_MID_PORT,
+            }).write(((lba >> 8) & 0xFF) as u8);
+
+            Port::<u8>::new(match self.channel {
+                Channel::Primary => PRIMARY_LBA_HIGH_PORT,
+                Channel::Secondary => SECONDARY_LBA_HIGH_PORT,
+            }).write(((lba >> 16) & 0xFF) as u8 | 0x40 | if self.is_slave { 0x10 } else { 0x00 });
 
             // Set sector count to 1
-            Port::new(match self.channel {
+            Port::<u8>::new(match self.channel {
                 Channel::Primary => PRIMARY_SECTOR_COUNT_PORT,
                 Channel::Secondary => SECONDARY_SECTOR_COUNT_PORT,
             }).write(1);
         }
 
         // Send the WRITE SECTORS command (0x30)
-        unsafe { 
-            port.write(AtaCommand::WriteSectorsWithRetry as u8);
+        unsafe {
+            command_port.write(AtaCommand::WriteSectorsWithRetry as u8);
         }
 
         self.wait_for_drq()?;
 
-        for i in 0..=255 {
-            let word = ((data[i * 2] as u16) << 8) | (data[(i*2)+1] as u16);
+        // Write 256 words (512 bytes)
+        let mut data_port: Port<u16> = Port::new(match self.channel {
+            Channel::Primary => PRIMARY_DATA_PORT,
+            Channel::Secondary => SECONDARY_DATA_PORT,
+        });
 
-            unsafe { 
-                Port::new(match self.channel {
-                    Channel::Primary => PRIMARY_DATA_PORT,
-                    Channel::Secondary => SECONDARY_DATA_PORT,
-                }).write(word);
-                
-                // Wait for the device to be ready
-                let mut status = 0;
-                loop {
-                    status = Port::new(match self.channel {
-                        Channel::Primary => PRIMARY_COMMAND_PORT,
-                        Channel::Secondary => SECONDARY_COMMAND_PORT,
-                    }).read();
-                    
-                    if (status & STATUS_DRQ) == 0 && (status & STATUS_BSY) == 0 { break; }
-                }
-
+        for i in 0..256 {
+            let word = (data[i * 2] as u16) | ((data[i * 2 + 1] as u16) << 8);
+            unsafe {
+                data_port.write(word);
             }
         }
 
@@ -313,7 +290,7 @@ pub enum Channel {
     Secondary,
 }
 
-impl From<Channel> for u8 {
+impl From<Channel> for u16 {
     fn from(channel: Channel) -> Self {
         match channel {
             Channel::Primary => 0x1F0,
@@ -342,8 +319,7 @@ pub struct AtaDeviceIdentifyInfo {
 
 impl AtaDeviceIdentifyInfo {
     // Helper method to get the model name as a &str (if valid)
-    #[allow(dead_code)]
-    fn model_name(&self) -> Option<&str> {
+    pub fn model_name(&self) -> Option<&str> {
         let bytes = self.model_number.as_slice();
         
         if !bytes.is_empty() && bytes[0] != 0x20 { // Check for non-space first byte
@@ -366,8 +342,7 @@ impl AtaDeviceIdentifyInfo {
     }
 
     // Helper method to get the serial number as a &str (if valid)
-    #[allow(dead_code)]
-    fn serial_number_str(&self) -> Option<&str> {
+    pub fn serial_number_str(&self) -> Option<&str> {
         let bytes = self.serial_number.as_slice();
         
         if !bytes.is_empty() && bytes[0] != 0x20 { // Check for non-space first byte
