@@ -133,8 +133,13 @@ Use WHOLE edit format - output complete file contents.
             echo "════════════════════════════════════════════════════════════"
             BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -50)
 
-            # Use timeout to prevent hanging, run interactively (not --print)
-            timeout 300 claude "
+            # Snapshot file state before Claude runs
+            FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
+            INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+
+            # Run Claude non-interactively with --print and skip permissions
+            # --dangerously-skip-permissions allows file edits and bash without prompts
+            timeout 300 claude --print --dangerously-skip-permissions "
 The local AI (aider with qwen3-30b) is stuck on this RustOS project.
 
 Current task from AIDER_INSTRUCTIONS.md:
@@ -153,7 +158,39 @@ Please:
 
 Work autonomously until the task is complete.
 "
-            STUCK_COUNT=0
+            CLAUDE_EXIT=$?
+
+            # Verify Claude actually made changes (anti-hallucination check)
+            FILES_AFTER=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
+            INSTRUCTIONS_AFTER=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+            DIRTY_AFTER=$(git status --porcelain 2>/dev/null | wc -l)
+            COMMITS_AFTER_CLAUDE=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+
+            if [ "$FILES_BEFORE" = "$FILES_AFTER" ] && [ "$INSTRUCTIONS_BEFORE" = "$INSTRUCTIONS_AFTER" ] && [ "$DIRTY_AFTER" -eq 0 ] && [ "$COMMITS_AFTER_CLAUDE" -eq "$COMMITS_AFTER" ]; then
+                echo ""
+                echo "⚠ Claude claimed to work but made NO actual changes!"
+                echo "  Files unchanged, no commits, no dirty files."
+                echo "  This was likely a hallucination. Continuing..."
+                # Don't reset stuck count - let it try again or escalate
+            else
+                echo ""
+                echo "✓ Claude made actual changes."
+                # Check if changes compile
+                if [ "$DIRTY_AFTER" -gt 0 ]; then
+                    echo "Testing uncommitted changes..."
+                    if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
+                        echo "✓ Build passes! Auto-committing Claude's work..."
+                        git add -A
+                        git commit -m "Auto-commit: Claude Code changes that compile"
+                        git push origin master
+                    else
+                        echo "✗ Build FAILS - reverting Claude's broken code..."
+                        git checkout -- .
+                        git clean -fd 2>/dev/null
+                    fi
+                fi
+                STUCK_COUNT=0
+            fi
         fi
     fi
 
@@ -164,13 +201,29 @@ Work autonomously until the task is complete.
         BUILD_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
         if echo "$BUILD_CHECK" | grep -q "error"; then
             echo "⚠ Sanity check found build errors - calling Claude haiku to fix..."
-            timeout 120 claude --model haiku "
+
+            # Run haiku non-interactively
+            timeout 120 claude --print --dangerously-skip-permissions --model haiku "
 Quick sanity check on RustOS project. Build is failing:
 
 $BUILD_CHECK
 
 Please fix any issues and ensure build passes. Be brief.
 "
+            # Verify and commit haiku's changes
+            DIRTY_HAIKU=$(git status --porcelain 2>/dev/null | wc -l)
+            if [ "$DIRTY_HAIKU" -gt 0 ]; then
+                if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
+                    echo "✓ Haiku fixed the build!"
+                    git add -A
+                    git commit -m "Auto-commit: Claude haiku build fix"
+                    git push origin master
+                else
+                    echo "✗ Haiku's fix didn't work - reverting..."
+                    git checkout -- .
+                    git clean -fd 2>/dev/null
+                fi
+            fi
         else
             echo "✓ Sanity check passed - build OK"
         fi
