@@ -17,6 +17,7 @@ mod paging;
 mod heap;
 mod keyboard;
 mod ps2_mouse; // Added mouse module
+mod pci;  // New PCI enumeration module
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -92,6 +93,63 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Enable hardware interrupts
     idt::enable_interrupts();
     println!("Hardware interrupts enabled");
+
+    // Initialize PCI enumeration (new feature)
+    let pci_devices = pci::init_pci();
+
+    if !pci_devices.is_empty() {
+        println!("PCI devices discovered: {}", pci_devices.len());
+        
+        for device in &pci_devices {
+            match (
+                pci::get_vendor_id(device),
+                pci::get_device_id(device),
+                pci::get_class_code(device)
+            ) {
+                (Some(vid), Some(did), Some(class)) => {
+                    println!("  Device: {} - Vendor ID {:#06X}, Device ID {:#06X} Class {:?}",
+                            device, vid, did, class);
+                    
+                    // Print BARs if available
+                    for i in 0..=5 {
+                        match pci::get_bar(device, i) {
+                            Some(bar_val) => println!("    BAR{}: {:?}", i, bar_val),
+                            None => continue,
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+        
+        // Print summary of discovered devices
+        let mut class_count = std::collections::HashMap::<u8, u32>::new();
+        for device in &pci_devices {
+            if let Some(class) = pci::get_class_code(device) {
+                *class_count.entry(class).or_insert(0) += 1;
+            }
+        }
+
+        println!("PCI Class Distribution:");
+        for (cls, count) in class_count.iter() {
+            match cls {
+                0x01 => println!("    Storage: {} device(s)", count),
+                0x02 => println!("    Network: {} device(s)", count),
+                0x03 => println!("    Display: {} device(s)", count),
+                0x04 => println!("    Multimedia: {} device(s)", count),
+                0x05 => println!("    Memory: {} device(s)", count),
+                0x06 => println!("    Bridge: {} device(s)", count),
+                0x07 => println!("    Communication: {} device(s)", count),
+                _ => println!("    Other ({:?}): {} device(s)", cls, count)
+            }
+        }
+
+    } else {
+        println!("No PCI devices found");
+    }
+
+    // Mark the task as complete
+    println!("PCI bus enumeration completed successfully");
 
     println!("RustOS ready!");
 
