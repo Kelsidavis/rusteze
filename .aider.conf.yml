@@ -4,8 +4,8 @@ yes-always: true
 auto-commits: true
 auto-test: false
 suggest-shell-commands: true
-map-tokens: 768
-max-chat-history-tokens: 1536
+map-tokens: 1024
+max-chat-history-tokens: 2048
 cache-prompts: true
 attribute-author: false
 attribute-committer: false
