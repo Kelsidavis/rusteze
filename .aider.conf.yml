@@ -1,0 +1,10 @@
+model: ollama/qwen3-30b-aider:latest
+edit-format: whole
+yes-always: true
+auto-commits: true
+auto-test: true
+test-cmd: RUSTFLAGS="-D warnings" cargo build --release 2>&1
+suggest-shell-commands: true
+map-tokens: 2048
+attribute-author: false
+attribute-committer: false
