@@ -25,6 +25,7 @@ STAT_CLAUDE_HALLUCINATIONS=0
 STAT_PLANNING_SESSIONS=0
 STAT_REVERTS=0
 STAT_COMMITS=0
+STAT_OOM_EVENTS=0
 
 # Configuration
 PLANNING_INTERVAL=10  # Run planning session every N sessions
@@ -63,6 +64,7 @@ print_stats() {
     echo "  Aider timeouts:         $STAT_AIDER_TIMEOUTS"
     echo "  Aider crashes:          $STAT_AIDER_CRASHES"
     echo "  Build failures:         $STAT_BUILD_FAILURES"
+    echo "  OOM events:             $STAT_OOM_EVENTS"
     echo "  Hallucinations:         $STAT_HALLUCINATIONS"
     echo "  Missing file claims:    $STAT_MISSING_FILES"
     echo "  Misplaced files fixed:  $STAT_MISPLACED_FILES"
@@ -292,13 +294,26 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
     # Let aider discover files via repo map instead of pre-loading
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
     log "INFO" "Starting aider session"
+
+    # If last session OOMed, use reduced context
+    if [ "${LAST_OOM:-0}" -eq 1 ]; then
+        echo "⚠ Last session hit OOM - using reduced context"
+        log "INFO" "Using reduced context after OOM"
+        AIDER_MAP_TOKENS=256
+        AIDER_HISTORY_TOKENS=512
+    else
+        AIDER_MAP_TOKENS=1024
+        AIDER_HISTORY_TOKENS=2048
+    fi
+
+    AIDER_OUTPUT=$(mktemp)
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
         Cargo.toml \
         --no-stream \
         --yes \
-        --map-tokens 1024 \
-        --max-chat-history-tokens 2048 \
+        --map-tokens $AIDER_MAP_TOKENS \
+        --max-chat-history-tokens $AIDER_HISTORY_TOKENS \
         --message "
 $BUILD_STATUS_MSG
 Read AIDER_INSTRUCTIONS.md. Work through unchecked [ ] items.
@@ -328,10 +343,22 @@ FILE LOCATION: All .rs module files MUST be in the src/ directory, not in the pr
   WRONG: pci.rs (in root)
 
 Use WHOLE edit format - output complete file contents.
-"
+" 2>&1 | tee "$AIDER_OUTPUT"
 
-    EXIT_CODE=$?
+    EXIT_CODE=${PIPESTATUS[0]}
     log "INFO" "Aider exited with code $EXIT_CODE"
+
+    # Check for OOM in output
+    if grep -qi "out of memory\|cuda.*failed\|exceeds.*token.*limit" "$AIDER_OUTPUT" 2>/dev/null; then
+        echo ""
+        echo "⚠ OOM DETECTED - will use reduced context next session"
+        log "WARN" "OOM detected in aider output"
+        LAST_OOM=1
+        STAT_OOM_EVENTS=$((STAT_OOM_EVENTS + 1))
+    else
+        LAST_OOM=0
+    fi
+    rm -f "$AIDER_OUTPUT"
 
     # If aider timed out (exit 124) or crashed, restart ollama to clear VRAM
     if [ $EXIT_CODE -eq 124 ]; then
