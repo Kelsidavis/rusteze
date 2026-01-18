@@ -18,6 +18,7 @@ STAT_HEALTH_CHECK_FAILURES=0
 STAT_BUILD_FAILURES=0
 STAT_HALLUCINATIONS=0
 STAT_MISSING_FILES=0
+STAT_MISPLACED_FILES=0
 STAT_STUCK_EVENTS=0
 STAT_CLAUDE_CALLS=0
 STAT_CLAUDE_HALLUCINATIONS=0
@@ -64,6 +65,7 @@ print_stats() {
     echo "  Build failures:         $STAT_BUILD_FAILURES"
     echo "  Hallucinations:         $STAT_HALLUCINATIONS"
     echo "  Missing file claims:    $STAT_MISSING_FILES"
+    echo "  Misplaced files fixed:  $STAT_MISPLACED_FILES"
     echo "  Code reverts:           $STAT_REVERTS"
     echo "  Stuck events:           $STAT_STUCK_EVENTS"
     echo ""
@@ -320,6 +322,10 @@ CRITICAL WARNING: Do NOT add 'mod foo;' to lib.rs without FIRST creating src/foo
 You MUST use edit blocks to create files - just describing what you would write is NOT enough.
 If you add a mod statement without creating the file, the build WILL fail.
 
+FILE LOCATION: All .rs module files MUST be in the src/ directory, not in the project root!
+  CORRECT: src/pci.rs
+  WRONG: pci.rs (in root)
+
 Use WHOLE edit format - output complete file contents.
 "
 
@@ -384,6 +390,19 @@ Use WHOLE edit format - output complete file contents.
         echo ""
         echo "Detected uncommitted changes, testing if they compile..."
         log "INFO" "Testing $DIRTY_FILES uncommitted files"
+
+        # AUTO-FIX: Move misplaced .rs files from root to src/ (common aider mistake)
+        # If lib.rs has 'mod foo;' and foo.rs exists in root but not in src/, move it
+        if [ -f src/lib.rs ]; then
+            for mod_name in $(grep -oP '(?<=^mod )\w+(?=;)' src/lib.rs 2>/dev/null); do
+                if [ -f "${mod_name}.rs" ] && [ ! -f "src/${mod_name}.rs" ]; then
+                    echo "⚠ Auto-fixing: Moving ${mod_name}.rs to src/${mod_name}.rs"
+                    log "WARN" "Auto-fixing misplaced file: ${mod_name}.rs -> src/${mod_name}.rs"
+                    mv "${mod_name}.rs" "src/${mod_name}.rs"
+                    STAT_MISPLACED_FILES=$((STAT_MISPLACED_FILES + 1))
+                fi
+            done
+        fi
 
         # PRE-BUILD CHECK: Detect missing module files (common hallucination pattern)
         # Check if lib.rs has mod statements for files that don't exist

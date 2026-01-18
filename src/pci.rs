@@ -1,7 +1,10 @@
 // src/pci.rs
 
+use alloc::vec::Vec;
+use alloc::vec;
 use x86_64::instructions::port::{Port, PortReadOnly};
 use core::fmt;
+use crate::println;
 
 /// Represents a PCI device function.
 #[derive(Debug)]
@@ -41,7 +44,7 @@ fn make_config_address(bus: u8, slot: u8, func: u8, reg_offset: u32) -> u32 {
     address |= ((func as u32) & 0x7) << 12;
     
     // Add register offset
-    address |= (reg_offset & 0xFFF);
+    address |= reg_offset & 0xFFF;
     
     address
 }
@@ -155,6 +158,7 @@ pub fn get_programming_interface(device: &PciDevice) -> Option<u8> {
 }
 
 /// Get a PCI device's revision ID.
+#[allow(dead_code)]
 pub fn get_revision_id(device: &PciDevice) -> Option<u8> {
     let rid = read_config_dword(device.bus, device.slot, device.func, 0x0A);
     
@@ -165,16 +169,18 @@ pub fn get_revision_id(device: &PciDevice) -> Option<u8> {
 }
 
 /// Get a PCI device's base address registers (BARs).
-pub fn get_bar(device: &PciDevice, bar_index: usize) -> Option<u64> {
+#[allow(dead_code)]
+pub fn get_bar(device: &PciDevice, bar_index: usize) -> Option<u32> {
     if bar_index > 5 { return None; } // Only support up to BAR5
-    
+
     let offset = 0x10 + (bar_index * 4);
-    
+
     read_config_dword(device.bus, device.slot, device.func, offset as u32)
         .map(|val| val & !0xF) // Clear the bottom 4 bits
 }
 
 /// Get a PCI device's command register.
+#[allow(dead_code)]
 pub fn get_command_register(device: &PciDevice) -> Option<u16> {
     let cmd = read_config_dword(device.bus, device.slot, device.func, 0x04);
     
@@ -185,6 +191,7 @@ pub fn get_command_register(device: &PciDevice) -> Option<u16> {
 }
 
 /// Get a PCI device's status register.
+#[allow(dead_code)]
 pub fn get_status_register(device: &PciDevice) -> Option<u16> {
     let stat = read_config_dword(device.bus, device.slot, device.func, 0x04);
     
@@ -214,17 +221,16 @@ pub fn init_pci() -> Vec<PciDevice> {
         if let Some(vid) = get_vendor_id(dev) {
             if let Some(did) = get_device_id(dev) {
                 // Print basic info about each discovered PCI device
-                match (get_class_code(dev), get_subclass_code(dev)) {
-                    (Some(class), Some(subclass)) => println!(
-                        "PCI Device: {} - Vendor ID 0x{:X}, Device ID 0x{:X} ({:#06X}:{:#04X})",
-                        dev, vid, did,
-                        class << 8 | subclass, 
-                        get_programming_interface(dev).unwrap_or(0)
-                    ),
-                }
+                let class = get_class_code(dev).unwrap_or(0);
+                let subclass = get_subclass_code(dev).unwrap_or(0);
+                let prog_if = get_programming_interface(dev).unwrap_or(0);
+                println!(
+                    "  {} - {:04X}:{:04X} class {:02X}:{:02X} prog {:02X}",
+                    dev, vid, did, class, subclass, prog_if
+                );
             }
         } else {
-            println!("PCI Device: {} - Unknown vendor/device ID", dev);
+            println!("  {} - Unknown vendor/device ID", dev);
         }
     }
 

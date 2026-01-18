@@ -123,7 +123,8 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
         }
         
         // Print summary of discovered devices
-        let mut class_count = std::collections::HashMap::<u8, u32>::new();
+        use alloc::collections::BTreeMap;
+        let mut class_count = BTreeMap::<u8, u32>::new();
         for device in &pci_devices {
             if let Some(class) = pci::get_class_code(device) {
                 *class_count.entry(class).or_insert(0) += 1;
@@ -140,7 +141,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
                 0x05 => println!("    Memory: {} device(s)", count),
                 0x06 => println!("    Bridge: {} device(s)", count),
                 0x07 => println!("    Communication: {} device(s)", count),
-                _ => println!("    Other ({:?}): {} device(s)", cls, count)
+                _ => println!("    Other (0x{:02X}): {} device(s)", cls, count)
             }
         }
 
