@@ -3,7 +3,6 @@
 use core::fmt;
 use spin::Mutex;
 
-#[allow(dead_code)]
 pub struct SerialPort {
     port: u16,
 }
@@ -21,7 +20,6 @@ impl SerialPort {
         }
     }
 
-    // Send a single byte through the serial port
     pub fn send_byte(&mut self, byte: u8) {
         while !self.is_ready() {}
         
@@ -30,7 +28,6 @@ impl SerialPort {
         }
     }
 
-    // Send a string of bytes through the serial port
     pub fn send_string(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
@@ -53,33 +50,33 @@ impl fmt::Write for SerialPort {
     }
 }
 
-// Initialize the serial port
+// Initialize the serial port at COM1 (0x3F8)
 pub fn init_serial_port() -> Option<Mutex<SerialPort>> {
     let mut serial = Some(SerialPort::new(0x3F8));
     
-    // Disable interrupts (set DLAB to 1)
+    // Disable interrupts and set DLAB to 1
     unsafe {
         core::ptr::write_volatile((serial.as_ref().unwrap().port + 2) as *mut u8, 0);
         
-        // Set baud rate divisor
+        // Set baud rate divisor (115200 / 9600 = 12)
         let div = 115_200 / 9600;
         core::ptr::write_volatile(
-            (serial.as_ref().unwrap().port + 3) as *const u8,
+            (serial.as_ref().unwrap().port + 3) as *mut u8,
             ((div >> 8) & 0xFF),
         );
         
         // Set low byte of divisor
         core::ptr::write_volatile((serial.as_ref().unwrap().port + 4) as *mut u8, div & 0xFF);
     }
-    
-    // Configure serial port (8 data bits, no parity, 1 stop bit)
+
+    // Configure line: 8 data bits, no parity, 1 stop bit (0x03)
     unsafe {
         core::ptr::write_volatile(
             (serial.as_ref().unwrap().port + 3) as *const u8,
-            0x03 | 0b11 << 6, // 8N1
+            0x03 | 0b11 << 6, // Set DLAB = 0 and configure line
         );
         
-        // Enable FIFO buffers and clear them
+        // Enable FIFO buffers with trigger level at 1 byte
         unsafe {
             core::ptr::write_volatile((serial.as_ref().unwrap().port + 2) as *mut u8, 0xC7);
             
@@ -108,14 +105,13 @@ pub fn init_serial_port() -> Option<Mutex<SerialPort>> {
         core::ptr::write_volatile((serial.as_ref().unwrap().port + 3) as *mut u8, val);
     }
 
-    // Return the serial port wrapped in a mutex
     Some(Mutex::new(serial.unwrap()))
 }
 
 // Global static instance of the serial port (initialized by init_serial_port)
 lazy_static::lazy_static! {
-    pub static ref SERIAL_PORT: Mutex<SerialPort> = match init_serial_port() {
-        Some(port) => port,
+    pub static ref SERIAL_PORT: Mutex<Option<SerialPort>> = match init_serial_port() {
+        Some(port) => Mutex::new(Some(port)),
         None => panic!("Failed to initialize COM1 serial port"),
     };
 }

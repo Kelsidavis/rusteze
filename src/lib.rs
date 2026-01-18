@@ -9,6 +9,21 @@ use core::panic::PanicInfo;
 mod vga;
 mod serial; // Added for COM1 driver
 
+// Initialize on module load (via lazy_static)
+lazy_static::lazy_static! {
+    static ref SERIAL_INIT: () = {
+        use crate::serial::*;
+        
+        if let Some(serial_port) = &SERIAL_PORT.try_lock() {
+            writeln!(serial_port, "Serial port initialized successfully").unwrap();
+            
+            println!("Testing dual output: VGA + COM1");
+        } else {
+            panic!("Failed to initialize serial port!");
+        }
+    };
+}
+
 entry_point!(kernel_main);
 
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
