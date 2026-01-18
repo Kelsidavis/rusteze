@@ -8,6 +8,7 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 SESSION=0
+STUCK_COUNT=0
 
 while true; do
     SESSION=$((SESSION + 1))
@@ -70,6 +71,32 @@ Use WHOLE edit format - output complete file contents.
         echo ""
         echo "Pushing to origin..."
         git push origin master
+        STUCK_COUNT=0
+    else
+        STUCK_COUNT=$((STUCK_COUNT + 1))
+        echo "No progress made (stuck count: $STUCK_COUNT)"
+
+        if [ $STUCK_COUNT -ge 2 ]; then
+            echo ""
+            echo "Calling Claude Code for help..."
+            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -30)
+            claude --print "
+The local AI (aider with qwen3-30b) is stuck on this project. Please help.
+
+Current task from AIDER_INSTRUCTIONS.md:
+$NEXT_TASKS
+
+Last build output:
+$BUILD_OUTPUT
+
+Please:
+1. Read the relevant source files
+2. Fix any issues preventing progress
+3. Run the build to verify
+4. Update AIDER_INSTRUCTIONS.md if task is complete
+"
+            STUCK_COUNT=0
+        fi
     fi
 
     # Only restart if there's more work to do
