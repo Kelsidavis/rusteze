@@ -88,11 +88,31 @@ Use WHOLE edit format - output complete file contents.
     COMMITS_AFTER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
     NEW_COMMITS=$((COMMITS_AFTER - COMMITS))
 
+    # HALLUCINATION DETECTION: Check for uncommitted changes
+    DIRTY_FILES=$(git status --porcelain 2>/dev/null | wc -l)
+
     echo ""
     echo "┌─────────────────────────────────────────────────────────────┐"
     echo "│ Session $SESSION complete (exit: $EXIT_CODE)"
-    echo "│ New commits: $NEW_COMMITS | Total: $COMMITS_AFTER"
+    echo "│ New commits: $NEW_COMMITS | Uncommitted: $DIRTY_FILES"
     echo "└─────────────────────────────────────────────────────────────┘"
+
+    # If there are dirty files, check if they compile
+    if [ "$DIRTY_FILES" -gt 0 ]; then
+        echo ""
+        echo "Detected uncommitted changes, testing if they compile..."
+        if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
+            echo "✓ Build passes! Auto-committing aider's work..."
+            git add -A
+            git commit -m "Auto-commit: aider changes that compile"
+            NEW_COMMITS=1
+        else
+            echo "✗ Build FAILS - reverting hallucinated/broken code..."
+            git checkout -- .
+            git clean -fd 2>/dev/null
+            echo "Reverted to last working state."
+        fi
+    fi
 
     if [ $NEW_COMMITS -gt 0 ]; then
         echo ""
@@ -108,10 +128,14 @@ Use WHOLE edit format - output complete file contents.
 
         if [ $STUCK_COUNT -ge 2 ]; then
             echo ""
+            echo "════════════════════════════════════════════════════════════"
             echo "Calling Claude Code for help..."
-            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -30)
-            claude --print "
-The local AI (aider with qwen3-30b) is stuck on this project. Please help.
+            echo "════════════════════════════════════════════════════════════"
+            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -50)
+
+            # Use timeout to prevent hanging, run interactively (not --print)
+            timeout 300 claude "
+The local AI (aider with qwen3-30b) is stuck on this RustOS project.
 
 Current task from AIDER_INSTRUCTIONS.md:
 $NEXT_TASKS
@@ -120,12 +144,35 @@ Last build output:
 $BUILD_OUTPUT
 
 Please:
-1. Read the relevant source files
-2. Fix any issues preventing progress
-3. Run the build to verify
-4. Update AIDER_INSTRUCTIONS.md if task is complete
+1. Read src/lib.rs and any relevant source files
+2. Create or fix the files needed for the current task
+3. Run: RUSTFLAGS=\"-D warnings\" cargo build --release
+4. Fix any errors until build passes with zero warnings
+5. Update AIDER_INSTRUCTIONS.md to mark [x] the completed task
+6. Commit and push the changes
+
+Work autonomously until the task is complete.
 "
             STUCK_COUNT=0
+        fi
+    fi
+
+    # Periodic sanity check every 5 sessions (uses haiku to keep costs low)
+    if [ $((SESSION % 5)) -eq 0 ] && [ $SESSION -gt 0 ]; then
+        echo ""
+        echo "Running periodic sanity check (session $SESSION)..."
+        BUILD_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
+        if echo "$BUILD_CHECK" | grep -q "error"; then
+            echo "⚠ Sanity check found build errors - calling Claude haiku to fix..."
+            timeout 120 claude --model haiku "
+Quick sanity check on RustOS project. Build is failing:
+
+$BUILD_CHECK
+
+Please fix any issues and ensure build passes. Be brief.
+"
+        else
+            echo "✓ Sanity check passed - build OK"
         fi
     fi
 
