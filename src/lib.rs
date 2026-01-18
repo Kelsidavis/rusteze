@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
 use bootloader_api::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 
@@ -9,11 +11,12 @@ mod vga;
 mod serial;
 mod gdt;
 mod idt;
-mod pit; // Added PIT module
-mod physical_memory;  // Added memory manager
-mod paging;         // Added paging module
+mod pit;
+mod physical_memory;
+mod paging;
+mod heap;
+mod keyboard;
 
-// Import the PageSize trait for Size4KiB constant access
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
 
@@ -70,6 +73,22 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     } else {
         panic!("Failed to initialize virtual memory mapping!");
     }
+
+    // Initialize the kernel heap allocator
+    unsafe {
+        heap::init_heap();
+    }
+    println!("Kernel heap allocator initialized (64 KiB linked list)");
+
+    // Initialize the PS/2 keyboard driver
+    keyboard::init_keyboard();
+    println!("PS/2 keyboard driver initialized");
+
+    // Enable hardware interrupts
+    idt::enable_interrupts();
+    println!("Hardware interrupts enabled");
+
+    println!("RustOS ready!");
 
     loop {
         core::hint::spin_loop();

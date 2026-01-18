@@ -136,12 +136,8 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    // Read scancode from PS/2 data port
-    let scancode: u8 = unsafe {
-        x86_64::instructions::port::Port::<u8>::new(0x60).read()
-    };
-
-    crate::serial_println!("Keyboard scancode: {}", scancode);
+    // Use the keyboard driver to process the scancode
+    crate::keyboard::keyboard_interrupt_handler();
 
     // Send EOI
     unsafe {

@@ -16,11 +16,11 @@
 - [x] Programmable Interrupt Controller (PIC) setup
 - [x] Timer interrupt (PIT) at 100Hz
 - [x] Physical memory manager (bitmap allocator)
-- [ ] Virtual memory / paging (4-level page tables)
-- [ ] Kernel heap allocator (linked list)
+- [x] Virtual memory / paging (4-level page tables)
+- [x] Kernel heap allocator (linked list)
 
 ## Phase 3: Hardware Abstraction
-- [ ] PS/2 keyboard driver with scancode translation
+- [x] PS/2 keyboard driver with scancode translation
 - [ ] PS/2 mouse driver
 - [ ] PCI bus enumeration
 - [ ] ATA/IDE disk driver (PIO mode)
@@ -72,5 +72,5 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-Phase: 2
-Next task: Virtual memory / paging (4-level page tables)
+Phase: 3
+Next task: PS/2 mouse driver
