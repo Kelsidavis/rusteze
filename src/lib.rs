@@ -14,7 +14,8 @@ mod physical_memory;  // Added memory manager
 mod paging;         // Added paging module
 
 // Import the PageSize trait for Size4KiB constant access
-use x86_64::structures::paging::{PageSize, PhysFrame};
+use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
+use x86_64::{VirtAddr, PhysAddr};
 
 entry_point!(kernel_main);
 
@@ -58,13 +59,13 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     let mut pager_manager = paging::init_paging(0x1_0000);
     
     // Test a simple mapping to ensure it works correctly
-    let test_page = x86_64::structures::paging::Page::<Size4KiB>::containing_address(
-        VirtAddr::from_u64(0x2_0000)
+    let test_page = Page::<Size4KiB>::containing_address(
+        VirtAddr::new(0x2_0000)
     );
-    
-    if pager_manager.map_to(test_page, 
-                           PhysFrame::containing_address(VirtAddr::from_u64(0x3_0000)), 
-                           TABLE_FLAGS | PRESENT).is_ok() {
+
+    if pager_manager.map_to(test_page,
+                           PhysFrame::containing_address(PhysAddr::new(0x3_0000)),
+                           paging::TABLE_FLAGS).is_ok() {
         println!("Virtual memory: 4-level page tables initialized successfully");
     } else {
         panic!("Failed to initialize virtual memory mapping!");
