@@ -9,6 +9,7 @@ mod vga;
 mod serial;
 mod gdt;
 mod idt;
+mod pit; // Added PIT module
 
 entry_point!(kernel_main);
 
@@ -35,6 +36,9 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     println!("Serial port: COM1 @ 9600 baud");
     println!("IDT and PIC initialized");
 
+    // Initialize the PIT timer interrupt at 100Hz
+    pit::init_pit();
+    
     loop {
         core::hint::spin_loop();
     }
