@@ -1,226 +1,229 @@
-use x86_64::structures::idt::{InterruptDescriptorTable, ExceptionStackFrame};
-use crate::gdt;
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use lazy_static::lazy_static;
 
-// Define interrupt handler function signature
-pub extern "x86-interrupt" fn divide_by_zero_handler(stack_frame: &mut ExceptionStackFrame) {
-    println!("EXCEPTION: Divide by zero\n{:#?}", stack_frame);
+// PIC ports
+const PIC1_COMMAND: u16 = 0x20;
+const PIC1_DATA: u16 = 0x21;
+const PIC2_COMMAND: u16 = 0xA0;
+const PIC2_DATA: u16 = 0xA1;
+
+// PIC commands
+const PIC_EOI: u8 = 0x20;
+
+// IRQ offsets (remapped to start at 32)
+const PIC1_OFFSET: u8 = 32;
+const PIC2_OFFSET: u8 = 40;
+
+// Exception handlers
+
+extern "x86-interrupt" fn divide_error_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: DIVIDE ERROR\n{:#?}", stack_frame);
 }
 
-pub extern "x86-interrupt" fn debug_exception_handler(stack_frame: &mut ExceptionStackFrame) {
-    println!("DEBUG EXCEPTION: {}", stack_frame);
+extern "x86-interrupt" fn debug_handler(stack_frame: InterruptStackFrame) {
+    crate::serial_println!("EXCEPTION: DEBUG\n{:#?}", stack_frame);
 }
 
-// Define a handler for the general protection fault
-pub extern "x86-interrupt" fn general_protection_fault_handler(
-    stack_frame: &mut ExceptionStackFrame,
+extern "x86-interrupt" fn non_maskable_interrupt_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: NON-MASKABLE INTERRUPT\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
+    crate::serial_println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn overflow_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: OVERFLOW\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn bound_range_exceeded_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: BOUND RANGE EXCEEDED\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn invalid_opcode_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: INVALID OPCODE\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn device_not_available_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: DEVICE NOT AVAILABLE\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn double_fault_handler(
+    stack_frame: InterruptStackFrame,
+    _error_code: u64,
+) -> ! {
+    panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn invalid_tss_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) {
+    panic!("EXCEPTION: INVALID TSS\nError Code: {}\n{:#?}", error_code, stack_frame);
+}
+
+extern "x86-interrupt" fn segment_not_present_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) {
+    panic!("EXCEPTION: SEGMENT NOT PRESENT\nError Code: {}\n{:#?}", error_code, stack_frame);
+}
+
+extern "x86-interrupt" fn stack_segment_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) {
+    panic!("EXCEPTION: STACK SEGMENT FAULT\nError Code: {}\n{:#?}", error_code, stack_frame);
+}
+
+extern "x86-interrupt" fn general_protection_fault_handler(
+    stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
     panic!(
-        "EXCEPTION: General Protection Fault\nError Code: {}\n{:#?}",
+        "EXCEPTION: GENERAL PROTECTION FAULT\nError Code: {}\n{:#?}",
         error_code, stack_frame
     );
 }
 
-// Define a handler for the page fault exception
-pub extern "x86-interrupt" fn page_fault_handler(
-    stack_frame: &mut ExceptionStackFrame,
+extern "x86-interrupt" fn page_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: PageFaultErrorCode,
+) {
+    use x86_64::registers::control::Cr2;
+
+    panic!(
+        "EXCEPTION: PAGE FAULT\nAccessed Address: {:?}\nError Code: {:?}\n{:#?}",
+        Cr2::read(),
+        error_code,
+        stack_frame
+    );
+}
+
+extern "x86-interrupt" fn x87_floating_point_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: x87 FLOATING POINT\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn alignment_check_handler(
+    stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
-    let address = x86_64::registers::control::Cr2::read();
-    
-    panic!(
-        "EXCEPTION: Page Fault\nError Code: {}\nFaulting Address: {:#?}\n{:#?}",
-        error_code, address, stack_frame
-    );
+    panic!("EXCEPTION: ALIGNMENT CHECK\nError Code: {}\n{:#?}", error_code, stack_frame);
 }
 
-// Define a handler for the double fault exception (critical)
-pub extern "x86-interrupt" fn double_fault_handler(
-    stack_frame: &mut ExceptionStackFrame,
-    _error_code: u64,
-) {
-    panic!(
-        "EXCEPTION: Double Fault\n{:#?}",
-        stack_frame
-    );
+extern "x86-interrupt" fn machine_check_handler(stack_frame: InterruptStackFrame) -> ! {
+    panic!("EXCEPTION: MACHINE CHECK\n{:#?}", stack_frame);
 }
 
-// Define a handler for the machine check exception (critical)
-pub extern "x86-interrupt" fn machine_check_handler(
-    stack_frame: &mut ExceptionStackFrame,
-    _error_code: u64,
-) {
-    panic!(
-        "EXCEPTION: Machine Check\n{:#?}",
-        stack_frame
-    );
+extern "x86-interrupt" fn simd_floating_point_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: SIMD FLOATING POINT\n{:#?}", stack_frame);
 }
 
-// Define a handler for the keyboard interrupt (IRQ1)
-pub extern "x86-interrupt" fn keyboard_interrupt_handler(
-    stack_frame: &mut ExceptionStackFrame,
-) {
-    // Read scan code from PS/2 port 0x60
-    let scancode = unsafe { x86_64::instructions::port::Port::<u8>::new(0x60).read() };
-    
-    println!("KEYBOARD INTERRUPT: Scan Code {}", scancode);
+extern "x86-interrupt" fn virtualization_handler(stack_frame: InterruptStackFrame) {
+    panic!("EXCEPTION: VIRTUALIZATION\n{:#?}", stack_frame);
 }
 
-// Define a handler for the timer interrupt (IRQ0)
-pub extern "x86-interrupt" fn timer_interrupt_handler(
-    stack_frame: &mut ExceptionStackFrame,
-) {
-    // Increment tick counter
-    crate::timer::TICKS.lock().add(1);
+// Hardware interrupt handlers (IRQs)
 
-    println!("TIMER INTERRUPT - Tick count increased");
-    
-    unsafe { 
-        // Send EOI (End of Interrupt) to PIC
-        x86_64::instructions::port::Port::<u8>::new(0x20).write(0x20);
-        
-        // If using APIC, send IPI instead - but for now we'll use legacy PIC
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Timer tick - just send EOI for now
+    unsafe {
+        x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(PIC_EOI);
     }
 }
 
-// Define a handler for the system call interrupt (int 0x80)
-pub extern "x86-interrupt" fn syscall_handler(
-    stack_frame: &mut ExceptionStackFrame,
-) {
-    // This is where syscalls will be handled in future phases
-    
-    println!("SYSTEM CALL - Not implemented yet");
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Read scancode from PS/2 data port
+    let scancode: u8 = unsafe {
+        x86_64::instructions::port::Port::<u8>::new(0x60).read()
+    };
+
+    crate::serial_println!("Keyboard scancode: {}", scancode);
+
+    // Send EOI
+    unsafe {
+        x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(PIC_EOI);
+    }
 }
 
-// Define a handler for the hardware interrupt (IRQ2-15)
-pub extern "x86-interrupt" fn irq_handler(
-    stack_frame: &mut ExceptionStackFrame,
-) {
-    // Read IRQ number from PIC
-    let irq = unsafe { x86_64::instructions::port::Port::<u8>::new(0x20).read() };
-    
-    println!("IRQ HANDLER - Interrupt {} received", irq);
-}
-
-// Define the IDT structure and initialization function
-pub struct Idt {
-    idt: InterruptDescriptorTable,
-}
-
-impl Idt {
-    pub fn new() -> Self {
+// Static IDT using lazy_static
+lazy_static! {
+    static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
-        
-        // Set up exception handlers (0-31)
-        idt.divide_by_zero.set_handler_fn(divide_by_zero_handler);
-        idt.debug_exception.set_handler_fn(debug_exception_handler);
+
+        // CPU exceptions (0-31)
+        idt.divide_error.set_handler_fn(divide_error_handler);
+        idt.debug.set_handler_fn(debug_handler);
+        idt.non_maskable_interrupt.set_handler_fn(non_maskable_interrupt_handler);
+        idt.breakpoint.set_handler_fn(breakpoint_handler);
+        idt.overflow.set_handler_fn(overflow_handler);
+        idt.bound_range_exceeded.set_handler_fn(bound_range_exceeded_handler);
+        idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
+        idt.device_not_available.set_handler_fn(device_not_available_handler);
+        unsafe {
+            idt.double_fault
+                .set_handler_fn(double_fault_handler)
+                .set_stack_index(crate::gdt::DOUBLE_FAULT_IST_INDEX);
+        }
+        idt.invalid_tss.set_handler_fn(invalid_tss_handler);
+        idt.segment_not_present.set_handler_fn(segment_not_present_handler);
+        idt.stack_segment_fault.set_handler_fn(stack_segment_fault_handler);
         idt.general_protection_fault.set_handler_fn(general_protection_fault_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
-        idt.double_fault.set_handler_fn(double_fault_handler);
+        idt.x87_floating_point.set_handler_fn(x87_floating_point_handler);
+        idt.alignment_check.set_handler_fn(alignment_check_handler);
         idt.machine_check.set_handler_fn(machine_check_handler);
+        idt.simd_floating_point.set_handler_fn(simd_floating_point_handler);
+        idt.virtualization.set_handler_fn(virtualization_handler);
 
-        // Set up system call handler (int 0x80)
-        idt[47].set_handler_fn(syscall_handler); 
+        // Hardware interrupts (IRQs remapped to 32-47)
+        idt[PIC1_OFFSET].set_handler_fn(timer_interrupt_handler);      // IRQ0 - Timer
+        idt[PIC1_OFFSET + 1].set_handler_fn(keyboard_interrupt_handler); // IRQ1 - Keyboard
 
-        // Set up hardware interrupt handlers for IRQs
-        idt[32].set_handler_fn(timer_interrupt_handler);
-        idt[33].set_handler_fn(keyboard_interrupt_handler);
-
-        // For other interrupts, use a generic handler (will be refined later)
-        let mut i = 0;
-        while i < 16 {
-            if !(i == 8 || i == 9) { 
-                idt[i + 32].set_handler_fn(irq_handler);
-            }
-            i += 1;
-        }
-
-        Idt { idt }
-    }
-
-    pub fn initialize(&self) {
-        self.idt.load();
-        
-        // Set up the IDT pointer for use in other modules
-        unsafe {
-            crate::IDT_PTR = Some(self as *const Self);
-        }
-    }
+        idt
+    };
 }
 
-// Initialize PIC (Programmable Interrupt Controller)
+/// Initialize the IDT
+pub fn init_idt() {
+    IDT.load();
+}
+
+/// Initialize the 8259 PIC (Programmable Interrupt Controller)
+/// Remaps IRQ 0-7 to interrupts 32-39 and IRQ 8-15 to interrupts 40-47
 pub fn init_pic() {
-    // Send ICW1 to initialize PICs
-    unsafe { 
-        x86_64::instructions::port::Port::<u8>::new(0x20).write(0b00010001);  // ICW1: Start initialization, edge-triggered mode
-        x86_64::instructions::port::Port::<u8>::new(0xA0).write(0b00010001);
-        
-        // Send ICW2 - set interrupt vector offsets (IRQs 32-47 for master, 56-79 for slave)
-        x86_64::instructions::port::Port::<u8>::new(0x21).write(32); 
-        x86_64::instructions::port::Port::<u8>::new(0xA1).write(40);
-        
-        // Send ICW3 - connect slave to master (IRQ2)
-        x86_64::instructions::port::Port::<u8>::new(0x21).write(0b00000010); 
-        x86_64::instructions::port::Port::<u8>::new(0xA1).write(0b00000000);
-        
-        // Send ICW4 - set mode (8259A compatibility)
-        x86_64::instructions::port::Port::<u8>::new(0x21).write(0b00000100); 
-        x86_64::instructions::port::Port::<u8>::new(0xA1).write(0b00000100);
-        
-        // Mask all interrupts initially (except for timer and keyboard)
-        unsafe {
-            let mut master_mask = 0xFF;
-            let mut slave_mask = 0xFF;
+    unsafe {
+        // Start initialization sequence (ICW1)
+        x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(0x11);
+        x86_64::instructions::port::Port::<u8>::new(PIC2_COMMAND).write(0x11);
 
-            // Unmask only the necessary IRQs: Timer (IRQ0), Keyboard (IRQ1) 
-            master_mask &= !(1 << 0);   // Enable timer
-            master_mask &= !(1 << 1);   // Enable keyboard
-            
-            x86_64::instructions::port::Port::<u8>::new(0x21).write(master_mask);
-            
-            slave_mask &= !(1 << 0);    // Enable cascade (IRQ2)
-            x86_64::instructions::port::Port::<u8>::new(0xA1).write(slave_mask);
-        }
-        
-        println!("PIC initialized successfully");
+        // ICW2: Set vector offsets
+        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(PIC1_OFFSET);
+        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(PIC2_OFFSET);
+
+        // ICW3: Tell Master PIC there is a slave at IRQ2
+        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0x04);
+        // ICW3: Tell Slave PIC its cascade identity
+        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0x02);
+
+        // ICW4: 8086 mode
+        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0x01);
+        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0x01);
+
+        // Mask all interrupts except timer (IRQ0) and keyboard (IRQ1)
+        x86_64::instructions::port::Port::<u8>::new(PIC1_DATA).write(0xFC); // 11111100 - enable IRQ0 and IRQ1
+        x86_64::instructions::port::Port::<u8>::new(PIC2_DATA).write(0xFF); // Mask all slave interrupts
     }
-
-    pub fn enable_irq(&self, irq: u8) {
-        unsafe { 
-            let port = if irq < 8 { 0x21 } else { 0xA1 };
-            
-            // Read current mask
-            let mut mask = x86_64::instructions::port::Port::<u8>::new(port).read();
-            
-            // Clear the bit for this IRQ (enable it)
-            mask &= !(1 << (irq % 8));
-            
-            // Write back to port
-            x86_64::instructions::port::Port::<u8>::new(port).write(mask);
-        }
-    }
-
-    pub fn disable_irq(&self, irq: u8) {
-        unsafe { 
-            let port = if irq < 8 { 0x21 } else { 0xA1 };
-            
-            // Read current mask
-            let mut mask = x86_64::instructions::port::Port::<u8>::new(port).read();
-            
-            // Set the bit for this IRQ (disable it)
-            mask |= (1 << (irq % 8));
-            
-            // Write back to port
-            x86_64::instructions::port::Port::<u8>::new(port).write(mask);
-        }
-    }
-
 }
 
-// Export a global pointer so other modules can access the IDT
-pub static mut IDT_PTR: Option<&'static Idt> = None;
+/// Enable hardware interrupts
+#[allow(dead_code)]
+pub fn enable_interrupts() {
+    x86_64::instructions::interrupts::enable();
+}
 
-lazy_static! {
-    pub static ref IDT_INSTANCE: Idt = Idt::new();
+/// Disable hardware interrupts
+#[allow(dead_code)]
+pub fn disable_interrupts() {
+    x86_64::instructions::interrupts::disable();
 }

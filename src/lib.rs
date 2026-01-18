@@ -1,40 +1,39 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 use bootloader_api::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 
 mod vga;
 mod serial;
-mod gdt;  // This was missing - now added to import the module
-mod idt;  // Added IDT module
+mod gdt;
+mod idt;
 
 entry_point!(kernel_main);
 
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
-    // Initialize GDT before anything else
-    unsafe { 
+    // Initialize GDT first (required for IDT)
+    unsafe {
         gdt::init_gdt();
-        
-        // Initialize PIC and set up interrupt handlers  
-        idt::init_pic(); 
-        
-        // Load the IDT after setting all handler functions
-        let mut idt = idt::Idt::new();
-        idt.initialize();
-
-        // Set global pointer to our initialized IDT for use in other modules
     }
+
+    // Initialize PIC (remap IRQs to 32-47)
+    idt::init_pic();
+
+    // Initialize and load the IDT
+    idt::init_idt();
 
     vga::WRITER.lock().clear_screen();
 
     println!("RustOS booting...");
     println!("VGA text mode: 80x25, 16 colors");
-    
-    // Test serial output  
+
+    // Test serial output
     serial_println!("Serial port initialized successfully");
     serial_println!("Testing dual output: VGA + COM1");
     println!("Serial port: COM1 @ 9600 baud");
+    println!("IDT and PIC initialized");
 
     loop {
         core::hint::spin_loop();
@@ -43,9 +42,6 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Print the error message to both serial and console
-    let mut writer = vga::WRITER.lock();
-    
     println!("KERNEL PANIC: {}", info);
     serial_println!("KERNEL PANIC: {}", info);
 

@@ -11,9 +11,9 @@
 ## Phase 2: CPU & Memory Setup
 - [x] Global Descriptor Table (GDT)
 - [x] Task State Segment (TSS)
-- [ ] Interrupt Descriptor Table (IDT)
-- [ ] Exception handlers (page fault, double fault, etc.)
-- [ ] Programmable Interrupt Controller (PIC) setup
+- [x] Interrupt Descriptor Table (IDT)
+- [x] Exception handlers (page fault, double fault, etc.)
+- [x] Programmable Interrupt Controller (PIC) setup
 - [ ] Timer interrupt (PIT) at 100Hz
 - [ ] Physical memory manager (bitmap allocator)
 - [ ] Virtual memory / paging (4-level page tables)
@@ -73,4 +73,4 @@ RUSTFLAGS="-D warnings" cargo build --release
 
 ## Current Status
 Phase: 2
-Next task: Interrupt Descriptor Table (IDT)
+Next task: Timer interrupt (PIT) at 100Hz
