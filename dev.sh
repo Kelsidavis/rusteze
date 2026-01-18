@@ -192,7 +192,6 @@ Use WHOLE edit format - output complete file contents.
         }' >/dev/null 2>&1
         echo "Model loaded."
     fi
-    fi  # End of else block (aider ran)
 
     COMMITS_AFTER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
     NEW_COMMITS=$((COMMITS_AFTER - COMMITS))
