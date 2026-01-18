@@ -59,13 +59,23 @@ Use WHOLE edit format - output complete file contents.
     if [ $EXIT_CODE -ne 0 ]; then
         echo ""
         echo "Aider exited with error ($EXIT_CODE). Restarting ollama..."
-        pkill -f "ollama serve"
-        sleep 3
-        ollama serve &>/dev/null &
+        pkill -9 -f "ollama"
         sleep 5
-        # Warm up the model
-        echo "Warming up model..."
-        curl -s http://localhost:11434/api/generate -d '{"model":"qwen3-30b-aider:latest","prompt":"hi","stream":false}' > /dev/null 2>&1
+        ollama serve &>/dev/null &
+        sleep 3
+
+        # Wait for ollama to be ready
+        echo "Waiting for ollama..."
+        for i in {1..30}; do
+            if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+
+        # Load the model (this blocks until loaded)
+        echo "Loading model into VRAM..."
+        ollama run qwen3-30b-aider:latest "/bye" 2>/dev/null
         sleep 2
     fi
 
