@@ -110,7 +110,7 @@ pub fn init_serial_port() -> Option<Mutex<SerialPort>> {
 
 // Global static instance of the serial port (initialized by init_serial_port)
 lazy_static::lazy_static! {
-    pub static ref SERIAL_PORT: Mutex<Option<SerialPort>> = match init_serial_port() {
+    pub static ref SERIAL_INIT: Mutex<Option<SerialPort>> = match init_serial_port() {
         Some(port) => Mutex::new(Some(port)),
         None => panic!("Failed to initialize COM1 serial port"),
     };

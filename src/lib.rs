@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
     static ref SERIAL_INIT: () = {
         use crate::serial::*;
         
-        if let Some(serial_port) = &SERIAL_PORT.try_lock() {
+        if let Some(serial_port) = &SERIAL_INIT.try_lock() {
             writeln!(serial_port, "Serial port initialized successfully").unwrap();
             
             println!("Testing dual output: VGA + COM1");
@@ -33,7 +33,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     println!("VGA text mode: 80x25, 16 colors");
     
     // Test serial output
-    if let Some(serial_port) = &serial::SERIAL_PORT.try_lock() {
+    if let Some(serial_port) = &serial::SERIAL_INIT.try_lock() {
         writeln!(serial_port, "Serial port initialized successfully").unwrap();
         
         // Send a test message through both VGA and Serial ports
@@ -52,7 +52,7 @@ fn panic(info: &PanicInfo) -> ! {
     // Try both VGA and Serial for the panic message
     println!("KERNEL PANIC: {}", info);
     
-    if let Some(serial_port) = &serial::SERIAL_PORT.try_lock() {
+    if let Some(serial_port) = &serial::SERIAL_INIT.try_lock() {
         writeln!(serial_port, "KERNEL PANIC: {}", info).unwrap();
     }
     
