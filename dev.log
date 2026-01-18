@@ -34,3 +34,8 @@
 [2026-01-18 03:43:55] [INFO] Progress: Done=19, Todo=19
 [2026-01-18 03:43:55] [WARN] Build broken at session start
 [2026-01-18 03:43:55] [INFO] Starting aider session
+[2026-01-18 04:24:42] [WARN] No progress, stuck count: 2
+[2026-01-18 04:24:42] [INFO] Escalating to Claude Code
+[2026-01-18 04:28:43] [INFO] Claude exited with code 0
+[2026-01-18 04:28:43] [INFO] Claude made actual changes
+[2026-01-18 04:28:43] [INFO] Claude changes compile, auto-committing
