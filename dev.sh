@@ -1,7 +1,16 @@
 #!/bin/bash
 # Continuous development script for RustOS
 
-cd /home/k/Desktop/aider/rusteze
+cd "$(dirname "$0")"
+
+# Cleanup on exit
+cleanup() {
+    echo ""
+    echo "Shutting down..."
+    pkill -9 -f "ollama" 2>/dev/null
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
 
 # Use only the RTX 5080 (GPU 1)
 export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
@@ -17,6 +26,13 @@ echo ""
 echo "Cleaning up any existing ollama processes..."
 pkill -9 -f "ollama" 2>/dev/null
 sleep 2
+
+# Verify they're dead
+while pgrep -f "ollama" >/dev/null 2>&1; do
+    echo "Waiting for ollama processes to terminate..."
+    pkill -9 -f "ollama" 2>/dev/null
+    sleep 1
+done
 
 # Start fresh ollama instance
 echo "Starting ollama..."
@@ -238,13 +254,13 @@ Work autonomously until the task is complete.
     if [ $((SESSION % 5)) -eq 0 ] && [ $SESSION -gt 0 ]; then
         echo ""
         echo "Running periodic sanity check (session $SESSION)..."
-        BUILD_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
+        BUILD_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | tail -50)
         if echo "$BUILD_CHECK" | grep -q "error"; then
             echo "⚠ Sanity check found build errors - calling Claude haiku to fix..."
 
             # Run haiku non-interactively
             timeout 120 claude --print --dangerously-skip-permissions --model haiku "
-Quick sanity check on RustOS project. Build is failing:
+Quick sanity check on RustOS project. Build is failing (last 50 lines):
 
 $BUILD_CHECK
 
