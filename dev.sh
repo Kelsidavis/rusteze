@@ -95,9 +95,18 @@ while true; do
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
-    # Don't pre-load all source files - causes context overflow
-    # Let aider discover files via repo map instead
-    aider \
+    # CHECK BUILD STATUS BEFORE RUNNING AIDER
+    # If build is already broken, skip aider and go straight to Claude
+    echo "Checking build status..."
+    BUILD_PRE_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
+    if echo "$BUILD_PRE_CHECK" | grep -q "^error"; then
+        echo "⚠ Build is broken - skipping aider, escalating to Claude..."
+        STUCK_COUNT=2  # Force immediate Claude escalation
+        EXIT_CODE=0
+    else
+        echo "✓ Build OK, running aider..."
+        # Let aider discover files via repo map instead of pre-loading
+        aider \
         AIDER_INSTRUCTIONS.md \
         Cargo.toml \
         --no-stream \
@@ -171,6 +180,7 @@ Use WHOLE edit format - output complete file contents.
         }' >/dev/null 2>&1
         echo "Model loaded."
     fi
+    fi  # End of else block (aider ran)
 
     COMMITS_AFTER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
     NEW_COMMITS=$((COMMITS_AFTER - COMMITS))
@@ -213,7 +223,7 @@ Use WHOLE edit format - output complete file contents.
         STUCK_COUNT=$((STUCK_COUNT + 1))
         echo "No progress made (stuck count: $STUCK_COUNT)"
 
-        if [ $STUCK_COUNT -ge 2 ]; then
+        if [ $STUCK_COUNT -ge 1 ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "Calling Claude Code for help..."
