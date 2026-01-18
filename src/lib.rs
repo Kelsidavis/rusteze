@@ -6,16 +6,22 @@ use core::panic::PanicInfo;
 
 mod vga;
 mod serial;
+mod gdt;
 
 entry_point!(kernel_main);
 
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
+    // Initialize GDT before anything else
+    unsafe { 
+        gdt::init_gdt();
+    }
+
     vga::WRITER.lock().clear_screen();
 
     println!("RustOS booting...");
     println!("VGA text mode: 80x25, 16 colors");
-
-    // Test serial output
+    
+    // Test serial output  
     serial_println!("Serial port initialized successfully");
     serial_println!("Testing dual output: VGA + COM1");
     println!("Serial port: COM1 @ 9600 baud");
