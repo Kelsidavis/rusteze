@@ -7,7 +7,6 @@ suggest-shell-commands: true
 map-tokens: 1024
 max-chat-history-tokens: 2048
 cache-prompts: true
-no-summarize: true
 attribute-author: false
 attribute-committer: false
 dark-mode: true
