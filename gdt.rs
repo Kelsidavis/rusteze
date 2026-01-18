@@ -102,3 +102,4 @@ impl core::fmt::Debug for Gdt {
         write!(f, "GlobalDescriptorTable {{ entries: {} }}", 5)
     }
 }
+```
