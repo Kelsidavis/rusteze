@@ -10,6 +10,7 @@ mod serial;
 mod gdt;
 mod idt;
 mod pit; // Added PIT module
+mod physical_memory;  // Added memory manager
 
 entry_point!(kernel_main);
 
@@ -38,6 +39,16 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
 
     // Initialize the PIT timer interrupt at 100Hz
     pit::init_pit();
+    
+    // Create a physical memory allocator from boot info
+    let mut frame_allocator = unsafe {
+        physical_memory::BitmapFrameAllocator::new(_boot_info.memory_map.clone())
+    };
+    
+    // Initialize the bitmap with reserved areas marked as used
+    frame_allocator.init();
+
+    println!("Physical memory manager initialized");
     
     loop {
         core::hint::spin_loop();
