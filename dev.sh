@@ -223,7 +223,7 @@ Use WHOLE edit format - output complete file contents.
         STUCK_COUNT=$((STUCK_COUNT + 1))
         echo "No progress made (stuck count: $STUCK_COUNT)"
 
-        if [ $STUCK_COUNT -ge 1 ]; then
+        if [ $STUCK_COUNT -ge 2 ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "Calling Claude Code for help..."
