@@ -95,18 +95,29 @@ while true; do
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
-    # CHECK BUILD STATUS BEFORE RUNNING AIDER
-    # If build is already broken, skip aider and go straight to Claude
+    # CHECK BUILD STATUS - tell aider about errors if any
     echo "Checking build status..."
     BUILD_PRE_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
+    BUILD_ERRORS=$(echo "$BUILD_PRE_CHECK" | tail -30)
+
     if echo "$BUILD_PRE_CHECK" | grep -q "^error"; then
-        echo "⚠ Build is broken - skipping aider, escalating to Claude..."
-        STUCK_COUNT=2  # Force immediate Claude escalation
-        EXIT_CODE=0
+        echo "⚠ Build has errors - telling aider to fix them first..."
+        BUILD_STATUS_MSG="
+URGENT: The build is currently BROKEN. Fix these errors FIRST before doing anything else:
+
+\`\`\`
+$BUILD_ERRORS
+\`\`\`
+
+After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
+"
     else
-        echo "✓ Build OK, running aider..."
-        # Let aider discover files via repo map instead of pre-loading
-        aider \
+        echo "✓ Build OK"
+        BUILD_STATUS_MSG=""
+    fi
+
+    # Let aider discover files via repo map instead of pre-loading
+    aider \
         AIDER_INSTRUCTIONS.md \
         Cargo.toml \
         --no-stream \
@@ -114,6 +125,7 @@ while true; do
         --map-tokens 1024 \
         --max-chat-history-tokens 2048 \
         --message "
+$BUILD_STATUS_MSG
 Read AIDER_INSTRUCTIONS.md. Work through unchecked [ ] items.
 
 NEXT TASKS:

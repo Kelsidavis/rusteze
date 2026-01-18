@@ -15,7 +15,7 @@
 - [x] Exception handlers (page fault, double fault, etc.)
 - [x] Programmable Interrupt Controller (PIC) setup
 - [x] Timer interrupt (PIT) at 100Hz
-- [ ] Physical memory manager (bitmap allocator)
+- [x] Physical memory manager (bitmap allocator)
 - [ ] Virtual memory / paging (4-level page tables)
 - [ ] Kernel heap allocator (linked list)
 
@@ -73,4 +73,4 @@ RUSTFLAGS="-D warnings" cargo build --release
 
 ## Current Status
 Phase: 2
-Next task: Physical memory manager (bitmap allocator)
+Next task: Virtual memory / paging (4-level page tables)

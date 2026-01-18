@@ -42,7 +42,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     
     // Create a physical memory allocator from boot info
     let mut frame_allocator = unsafe {
-        physical_memory::BitmapFrameAllocator::new(_boot_info.memory_map.clone())
+        physical_memory::BitmapFrameAllocator::new(_boot_info.memory_regions.as_ref())
     };
     
     // Initialize the bitmap with reserved areas marked as used
