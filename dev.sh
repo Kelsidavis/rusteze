@@ -17,6 +17,7 @@ STAT_AIDER_CRASHES=0
 STAT_HEALTH_CHECK_FAILURES=0
 STAT_BUILD_FAILURES=0
 STAT_HALLUCINATIONS=0
+STAT_MISSING_FILES=0
 STAT_STUCK_EVENTS=0
 STAT_CLAUDE_CALLS=0
 STAT_CLAUDE_HALLUCINATIONS=0
@@ -62,6 +63,7 @@ print_stats() {
     echo "  Aider crashes:          $STAT_AIDER_CRASHES"
     echo "  Build failures:         $STAT_BUILD_FAILURES"
     echo "  Hallucinations:         $STAT_HALLUCINATIONS"
+    echo "  Missing file claims:    $STAT_MISSING_FILES"
     echo "  Code reverts:           $STAT_REVERTS"
     echo "  Stuck events:           $STAT_STUCK_EVENTS"
     echo ""
@@ -79,7 +81,7 @@ print_stats() {
     log "INFO" "Runtime: ${hours}h ${minutes}m, Sessions: $STAT_SESSIONS"
     log "INFO" "Ollama restarts: $STAT_OLLAMA_RESTARTS, Model failures: $STAT_MODEL_LOAD_FAILURES"
     log "INFO" "Aider timeouts: $STAT_AIDER_TIMEOUTS, Aider crashes: $STAT_AIDER_CRASHES"
-    log "INFO" "Build failures: $STAT_BUILD_FAILURES, Reverts: $STAT_REVERTS"
+    log "INFO" "Build failures: $STAT_BUILD_FAILURES, Missing files: $STAT_MISSING_FILES, Reverts: $STAT_REVERTS"
     log "INFO" "Stuck events: $STAT_STUCK_EVENTS, Claude calls: $STAT_CLAUDE_CALLS"
     log "INFO" "Commits: $STAT_COMMITS"
 }
@@ -307,12 +309,16 @@ CRITICAL: After EVERY change, run:
 Warnings are ERRORS. Code must compile with ZERO warnings before marking [x].
 
 WORKFLOW:
-1. Implement feature (create new .rs file if needed)
-2. Update lib.rs to include the module
+1. If creating a new module, you MUST create the .rs file FIRST using edit blocks
+2. THEN add 'mod modulename;' to lib.rs
 3. RUN THE BUILD - do not skip this step
 4. Fix ALL errors and warnings
 5. Only mark [x] when build succeeds with no warnings
 6. Move to next task
+
+CRITICAL WARNING: Do NOT add 'mod foo;' to lib.rs without FIRST creating src/foo.rs!
+You MUST use edit blocks to create files - just describing what you would write is NOT enough.
+If you add a mod statement without creating the file, the build WILL fail.
 
 Use WHOLE edit format - output complete file contents.
 "
@@ -378,7 +384,28 @@ Use WHOLE edit format - output complete file contents.
         echo ""
         echo "Detected uncommitted changes, testing if they compile..."
         log "INFO" "Testing $DIRTY_FILES uncommitted files"
-        if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
+
+        # PRE-BUILD CHECK: Detect missing module files (common hallucination pattern)
+        # Check if lib.rs has mod statements for files that don't exist
+        MISSING_MODS=""
+        if [ -f src/lib.rs ]; then
+            for mod_name in $(grep -oP '(?<=^mod )\w+(?=;)' src/lib.rs 2>/dev/null); do
+                if [ ! -f "src/${mod_name}.rs" ] && [ ! -d "src/${mod_name}" ]; then
+                    MISSING_MODS="$MISSING_MODS $mod_name"
+                fi
+            done
+        fi
+
+        if [ -n "$MISSING_MODS" ]; then
+            echo "✗ HALLUCINATION DETECTED: mod statement(s) without files:$MISSING_MODS"
+            log "WARN" "Missing module files detected:$MISSING_MODS (aider claimed to create but didn't)"
+            STAT_MISSING_FILES=$((STAT_MISSING_FILES + 1))
+            STAT_HALLUCINATIONS=$((STAT_HALLUCINATIONS + 1))
+            STAT_REVERTS=$((STAT_REVERTS + 1))
+            git checkout -- .
+            git clean -fd 2>/dev/null
+            echo "Reverted to last working state."
+        elif RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
             echo "✓ Build passes! Auto-committing aider's work..."
             log "INFO" "Uncommitted changes compile, auto-committing"
             git add -A
