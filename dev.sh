@@ -291,17 +291,43 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
 
     # Let aider discover files via repo map instead of pre-loading
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
-    # NOTE: Context settings come from .aider.conf.yml - don't override here
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
+        Cargo.toml \
         --no-stream \
         --yes \
+        --map-tokens 1024 \
+        --max-chat-history-tokens 2048 \
         --message "
 $BUILD_STATUS_MSG
-TASK: $NEXT_TASK_ONELINE
+Read AIDER_INSTRUCTIONS.md. Work through unchecked [ ] items.
 
-RULES: Create files in src/ FIRST, then add mod. Build with RUSTFLAGS=\"-D warnings\" cargo build --release. Zero warnings before marking [x].
+NEXT TASKS:
+$NEXT_TASKS
+
+CRITICAL: After EVERY change, run:
+  RUSTFLAGS=\"-D warnings\" cargo build --release
+
+Warnings are ERRORS. Code must compile with ZERO warnings before marking [x].
+
+WORKFLOW:
+1. If creating a new module, you MUST create the .rs file FIRST using edit blocks
+2. THEN add 'mod modulename;' to lib.rs
+3. RUN THE BUILD - do not skip this step
+4. Fix ALL errors and warnings
+5. Only mark [x] when build succeeds with no warnings
+6. Move to next task
+
+CRITICAL WARNING: Do NOT add 'mod foo;' to lib.rs without FIRST creating src/foo.rs!
+You MUST use edit blocks to create files - just describing what you would write is NOT enough.
+If you add a mod statement without creating the file, the build WILL fail.
+
+FILE LOCATION: All .rs module files MUST be in the src/ directory, not in the project root!
+  CORRECT: src/pci.rs
+  WRONG: pci.rs (in root)
+
+Use WHOLE edit format - output complete file contents.
 "
 
     EXIT_CODE=$?

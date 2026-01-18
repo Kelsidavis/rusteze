@@ -23,20 +23,3 @@
 [2026-01-18 03:27:50] [INFO] Aider exited with code 0
 [2026-01-18 03:27:50] [INFO] Testing 2 uncommitted files
 [2026-01-18 03:27:51] [INFO] Uncommitted changes compile, auto-committing
-[2026-01-18 03:34:06] [WARN] No progress, stuck count: 1
-[2026-01-18 03:34:07] [INFO] --- Session 3 started ---
-[2026-01-18 03:34:07] [INFO] Task: - ATA/IDE disk driver (PIO mode)
-[2026-01-18 03:34:07] [INFO] Progress: Done=19, Todo=19
-[2026-01-18 03:34:07] [WARN] Build broken at session start
-[2026-01-18 03:34:07] [INFO] Starting aider session
-
-[2026-01-18 03:38:07] [INFO] ========================================
-[2026-01-18 03:38:07] [INFO] dev.sh started
-[2026-01-18 03:38:07] [INFO] ========================================
-[2026-01-18 03:38:10] [INFO] Model load attempt 1/3
-[2026-01-18 03:38:14] [INFO] Model loaded successfully
-[2026-01-18 03:38:14] [INFO] --- Session 1 started ---
-[2026-01-18 03:38:14] [INFO] Task: - ATA/IDE disk driver (PIO mode)
-[2026-01-18 03:38:14] [INFO] Progress: Done=19, Todo=19
-[2026-01-18 03:38:15] [WARN] Build broken at session start
-[2026-01-18 03:38:15] [INFO] Starting aider session
