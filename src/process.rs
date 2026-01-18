@@ -1,79 +1,68 @@
 // src/process.rs
 
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
-use crate::gdt;
-use core::arch::asm;
+use crate::println;
 
-/// Process Control Block (PCB) structure to manage process state.
+/// Represents a process control block.
 #[derive(Debug)]
-pub struct Pcb {
-    /// Unique identifier for the process
-    pub pid: usize,
+pub struct ProcessControlBlock {
+    /// Unique identifier for this process (PID)
+    pub pid: u32,
     
-    /// Current stack pointer when in kernel mode
-    pub rsp0: u64,
-    
-    /// Stack pointers for different privilege levels
-    pub rsp1: u64,
-    pub rsp2: u64,
-    
-    /// Saved registers from user context (when switching to kernel)
-    pub saved_regs: UserContextRegisters,
-    
-    /// Process state - running, ready, blocked, zombie
+    /// Current state of the process
     pub state: ProcessState,
     
-    /// Memory management information (page table pointer, etc.)
-    // TODO: Add memory mapping info when paging is implemented
+    /// Stack pointer at time of context switch
+    pub rsp: usize,
     
-    /// File descriptor table for this process
-    // TODO: Implement file descriptors later in Phase 6
-}
-
-/// User context registers that need to be saved/restored during context switching.
-#[derive(Debug)]
-pub struct UserContextRegisters {
+    /// Instruction pointer at time of context switch  
+    pub rip: usize,
+    
+    /// General purpose registers saved during context switch
     pub rax: u64,
     pub rbx: u64,
     pub rcx: u64,
     pub rdx: u64,
     pub rsi: u64,
     pub rdi: u64,
-    pub rsp: u64,  // User stack pointer
-    pub rip: u64,  // Instruction pointer (program counter)
+    pub rbp: u64,
     
-    /// Flags register - contains status flags like carry bit, etc.
-    pub rflags: u64,
+    /// Segment registers
+    pub cs: u16,
+    pub ds: u16,
+    pub es: u16,
+    pub fs: u16,
+    pub gs: u16,
+    pub ss: u16,
 }
 
-/// Process states that a process can be in during its lifecycle.
+/// Possible states a process can be in.
 #[derive(Debug, Clone, Copy)]
 pub enum ProcessState {
-    Running,
+    /// Ready to run (waiting for CPU time)
     Ready,
+    
+    /// Currently running on the CPU
+    Running,
+    
+    /// Waiting for an event or resource
     Blocked,
+    
+    /// Terminated and waiting for cleanup
     Zombie,
 }
 
-impl Default for UserContextRegisters {
+impl Default for ProcessControlBlock {
     fn default() -> Self {
         Self {
-            rax: 0,
-            rbx: 0,
-            rcx: 0,
-            rdx: 0,
-            rsi: 0,
-            rdi: 0,
+            pid: 0,
+            state: ProcessState::Ready,
             rsp: 0,
             rip: 0,
-            rflags: 0,
+            rax: 0, rbx: 0, rcx: 0, rdx: 0,
+            rsi: 0, rdi: 0, rbp: 0,
+            cs: 0, ds: 0, es: 0, fs: 0, gs: 0, ss: 0,
         }
-    }
-}
-
-impl Default for ProcessState {
-    fn default() -> Self {
-        ProcessState::Ready
     }
 }
 
@@ -81,110 +70,290 @@ impl Default for ProcessState {
 pub struct ContextSwitcher;
 
 impl ContextSwitcher {
-    /// Save the current user context into a Pcb structure.
-    pub unsafe extern "C" fn save_context(pcb: &mut Pcb) {
-        // We'll use inline assembly to capture registers
-        asm!(
-            "
-                movq %0, rax
-                movq %1, rbx 
-                movq %2, rcx
-                movq %3, rdx
-                movq %4, rsi
-                movq %5, rdi
-                movq %6, rsp
-                movq %7, rip
-                movq %8, rflags
-                
-            ",
-            in(reg) &mut pcb.saved_regs.rax,
-            in(reg) &mut pcb.saved_regs.rbx,
-            in(reg) &mut pcb.saved_regs.rcx,
-            in(reg) &mut pcb.saved_regs.rdx,
-            in(reg) &mut pcb.saved_regs.rsi,
-            in(reg) &mut pcb.saved_regs.rdi,
-            in(reg) &mut pcb.saved_regs.rsp,
-            in(reg) &mut pcb.saved_regs.rip,
-            in(reg) &mut pcb.saved_regs.rflags,
+    /// Save the current CPU context into a ProcessControlBlock
+    pub fn save_context(pcb: &mut ProcessControlBlock) -> ! {
+        unsafe extern "C" fn save_context_asm() -> ! {
+            let mut rax: u64;
+            let mut rbx: u64;
+            let mut rcx: u64;
+            let mut rdx: u64;
+            let mut rsi: u64;
+            let mut rdi: u64;
+            let mut rsp: usize;
             
-            // We're using a special register to store the Pcb pointer
-            options(nostack, preserves_flags)
-        );
-    }
-
-    /// Restore user context from a Pcb structure.
-    pub unsafe extern "C" fn restore_context(pcb: &Pcb) {
-        asm!(
-            "
-                movq rax, %0 
-                movq rbx, %1
-                movq rcx, %2
-                movq rdx, %3
-                movq rsi, %4
-                movq rdi, %5
-                movq rsp, %6
-                movq rip, %7
-                movq rflags, %8
-                
-            ",
-            in(reg) &pcb.saved_regs.rax,
-            in(reg) &pcb.saved_regs.rbx,
-            in(reg) &pcb.saved_regs.rcx,
-            in(reg) &pcb.saved_regs.rdx,
-            in(reg) &pcb.saved_regs.rsi,
-            in(reg) &pcb.saved_regs.rdi,
-            in(reg) &pcb.saved_regs.rsp,
-            in(reg) &pcb.saved_regs.rip,
-            in(reg) &pcb.saved_regs.rflags,
-
-            options(nostack, preserves_flags)
-        );
-    }
-
-    /// Switch from one process to another.
-    pub unsafe extern "C" fn switch_to(pcb: *mut Pcb) {
-        // Save current context
-        let mut current_pcb = (*pcb).clone();
-        
-        Self::save_context(&mut current_pcb);
-        
-        // Restore new context (this will return directly into the target process)
-        if !(*pcb).state == ProcessState::Zombie {
-            Self::restore_context(&*pcb);
+            // Use inline assembly to capture the current register values
+            asm!(
+                "mov {}, rax",
+                "mov {}, rbx", 
+                "mov {}, rcx",
+                "mov {}, rdx",
+                "mov {}, rsi",
+                "mov {}, rdi",
+                "mov {}, rsp",
+                out(reg) rax,
+                out(reg) rbx,
+                out(reg) rcx,
+                out(reg) rdx,
+                out(reg) rsi,
+                out(reg) rdi,
+                out(reg) rsp,
+                options(noreturn)
+            );
             
-            // If we get here, it means this was a switch back to an existing
-            // running thread. The restore function doesn't return.
+            // Save the captured values to our PCB
+            pcb.rax = rax;
+            pcb.rbx = rbx;
+            pcb.rcx = rcx;
+            pcb.rdx = rdx;
+            pcb.rsi = rsi;
+            pcb.rdi = rdi;
+            pcb.rsp = rsp as usize;
+            
+            // Save the instruction pointer (RIP)
+            let rip: u64;
+            asm!("mov {}, rip", out(reg) rip, options(noreturn));
+            pcb.rip = rip as usize;
+            
+            // Get segment registers
+            let cs: u16; 
+            let ds: u16;
+            let es: u16;
+            let fs: u16;
+            let gs: u16;
+            let ss: u16;
+            
+            asm!(
+                "mov {}, cs",
+                "mov {}, ds",  
+                "mov {}, es",
+                "mov {}, fs",
+                "mov {}, gs",
+                "mov {}, ss",
+                out(reg) cs,
+                out(reg) ds,
+                out(reg) es,
+                out(reg) fs,
+                out(reg) gs,
+                out(reg) ss
+            );
+            
+            pcb.cs = cs;
+            pcb.ds = ds;
+            pcb.es = es;
+            pcb.fs = fs;
+            pcb.gs = gs;
+            pcb.ss = ss;
+        }
+        
+        // Call the assembly function to save context
+        unsafe {
+            save_context_asm();
         }
     }
 
-    /// Create a new process with the given initial state and stack pointer.
-    pub fn create_process(pid: usize, entry_point: u64) -> Pcb {
-        let mut pcb = Pcb {
-            pid,
-            rsp0: 0x1_0000 + (pid as u64 * 8 * 1024), // Stack for kernel mode
-            rsp1: 0, 
-            rsp2: 0,
+    /// Restore a previously saved CPU context from a ProcessControlBlock
+    pub fn restore_context(pcb: &ProcessControlBlock) -> ! {
+        unsafe extern "C" fn restore_context_asm() -> ! {
+            // Use inline assembly to load the register values back into registers
             
-            saved_regs: UserContextRegisters::default(),
-            
-            state: ProcessState::Ready,
-
-            // Initialize memory management info - will be filled in later when paging is implemented
-        };
-
-        // Set up initial user context registers for the new process
-        pcb.saved_regs.rip = entry_point;
+            asm!(
+                "mov rax, {}",
+                "mov rbx, {}", 
+                "mov rcx, {}",
+                "mov rdx, {}",
+                "mov rsi, {}",
+                "mov rdi, {}",
+                // Load stack pointer
+                "mov rsp, {}",
+                // Set instruction pointer (RIP)
+                "jmp *{}",
+                in(reg) pcb.rax,
+                in(reg) pcb.rbx,
+                in(reg) pcb.rcx,
+                in(reg) pcb.rdx,
+                in(reg) pcb.rsi,
+                in(reg) pcb.rdi,
+                in(reg) pcb.rsp as u64,
+                // We can't directly jump to a register value, so we use an indirect jmp
+                "mov rax, {}",
+                "jmp *rax", 
+                options(noreturn)
+            );
+        }
         
-        // Clear flags register (set to 0)
-        pcb.saved_regs.rflags = 0;
+        unsafe {
+            restore_context_asm();
+        }
+    }
 
-        // We'll set rax, rbx etc. later when we need them
-
-        pcb
+    /// Switch from current process context to another's.
+    pub fn switch_to(pcb: &ProcessControlBlock) -> ! {
+        // Save the current state
+        let mut current_pcb = ProcessControlBlock::default();
+        Self::save_context(&mut current_pcb);
+        
+        // Restore the new state (this will never return)
+        Self::restore_context(pcb);
     }
 }
 
-/// Initialize context switching functionality.
-pub fn init_context_switching() {
-    println!("Context switching system initialized");
+/// Initialize kernel threads and process management.
+pub fn init_processes() {
+    println!("Initializing process control block system...");
+    
+    let mut pcb = ProcessControlBlock::default();
+    pcb.pid = 1;
+    pcb.state = ProcessState::Running;
+    
+    // Mark as initialized
+    unsafe { 
+        crate::PROCESS_MANAGER.init(pcb);
+    }
+}
+
+/// A simple scheduler that runs processes in round-robin fashion.
+pub struct RoundRobinScheduler {
+    current_process: Option<ProcessControlBlock>,
+    ready_queue: Vec<ProcessControlBlock>,
+}
+
+impl RoundRobinScheduler {
+    pub fn new() -> Self {
+        Self {
+            current_process: None,
+            ready_queue: vec![],
+        }
+    }
+
+    /// Add a process to the scheduler's queue
+    pub fn add(&mut self, pcb: ProcessControlBlock) {
+        // Set state to Ready and enqueue it
+        let mut proc = pcb;
+        proc.state = ProcessState::Ready;
+        
+        if !self.ready_queue.contains(&proc) {
+            self.ready_queue.push(proc);
+        }
+    }
+
+    /// Get the next process in round-robin order
+    pub fn get_next_process(&mut self) -> Option<ProcessControlBlock> {
+        // If no processes, return None
+        if self.ready_queue.is_empty() {
+            return None;
+        }
+        
+        let mut current = 0;
+        
+        // Find and remove the next process from queue (round-robin)
+        for i in 0..self.ready_queue.len() {
+            if &self.ready_queue[i] == self.current_process.as_ref().unwrap_or(&ProcessControlBlock::default()) {
+                current = i + 1; 
+                break;
+            }
+        }
+
+        // Wrap around to beginning
+        let next_idx = (current) % self.ready_queue.len();
+        
+        Some(self.ready_queue.remove(next_idx))
+    }
+
+    /// Set the currently running process
+    pub fn set_current(&mut self, pcb: ProcessControlBlock) {
+        self.current_process = Some(pcb);
+    }
+}
+
+/// A global manager for processes.
+pub struct ProcessManager {
+    current_pcb: Option<ProcessControlBlock>,
+    scheduler: RoundRobinScheduler,
+}
+
+impl ProcessManager {
+    /// Create a new process manager
+    pub fn new() -> Self {
+        Self {
+            current_pcb: None,
+            scheduler: RoundRobinScheduler::new(),
+        }
+    }
+
+    /// Initialize the process manager with an initial PCB
+    pub fn init(&mut self, pcb: ProcessControlBlock) {
+        // Set up first running process
+        self.current_pcb = Some(pcb);
+        
+        println!("Process management system initialized");
+    }
+
+    /// Add a new process to be scheduled
+    pub fn add_process(&mut self, pcb: ProcessControlBlock) {
+        self.scheduler.add(pcb);
+    }
+    
+    /// Get the next ready-to-run process (round-robin)
+    pub fn get_next_process(&mut self) -> Option<ProcessControlBlock> {
+        // Try to find a new running process
+        let mut proc = match self.scheduler.get_next_process() {
+            Some(proc) => proc,
+            None => return None,  // No processes ready
+        };
+        
+        // Update current state and scheduler info
+        self.current_pcb = Some(proc.clone());
+        self.scheduler.set_current(proc);
+        
+        println!("Switching to process PID {}", proc.pid);
+
+        Some(proc)
+    }
+
+    /// Get the currently running process (if any)
+    pub fn get_current(&self) -> Option<&ProcessControlBlock> {
+        self.current_pcb.as_ref()
+    }
+}
+
+// Global instance of ProcessManager
+pub static mut PROCESS_MANAGER: ProcessManager = ProcessManager::new();
+
+/// A simple test function to demonstrate context switching.
+#[allow(dead_code)]
+fn test_context_switch() {
+    println!("Testing process control block and context switch...");
+    
+    // Create two processes with different PIDs
+    let mut proc1 = ProcessControlBlock::default();
+    proc1.pid = 1;
+    proc1.state = ProcessState::Ready;
+    proc1.rax = 0x123456789ABCDEF0u64; 
+    proc1.rip = 0xCAFEBABE;
+
+    let mut proc2 = ProcessControlBlock::default();
+    proc2.pid = 2;
+    proc2.state = ProcessState::Ready;
+    proc2.rax = 0xFEDCBA9876543210u64; 
+    proc2.rip = 0xDEADBEEF;
+
+    // Add them to the scheduler
+    unsafe {
+        PROCESS_MANAGER.add_process(proc1);
+        PROCESS_MANAGER.add_process(proc2);
+
+        let next_proc = PROCESS_MANAGER.get_next_process();
+        
+        if let Some(pcb) = next_proc {
+            println!("Switching context: PID {}", pcb.pid);
+            
+            // Simulate switching back to the original process
+            unsafe { 
+                ContextSwitcher::switch_to(&pcb);  // This should never return!
+            }
+        } else {
+            println!("No processes available for scheduling");
+        }
+
+    }
 }
