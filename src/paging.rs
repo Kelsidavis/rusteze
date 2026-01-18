@@ -14,11 +14,13 @@ const WRITABLE: u64 = 1 << 1;
 const USER_ACCESSIBLE: u64 = 1 << 2;
 const WRITE_THROUGH: u64 = 1 << 3;
 const CACHE_DISABLED: u64 = 1 << 4;
-const HUGE_PAGE: u64 = 1 << 7;
 
 // Page table entry flags for page tables
-const TABLE_FLAGS: u64 = PRESENT | WRITABLE | USER_ACCESSIBLE;
+pub const TABLE_FLAGS: x86_64::structures::paging::PageTableFlags =
+    x86_64::structures::paging::PageTableFlags::PRESENT |
+    x86_64::structures::paging::PageTableFlags::WRITABLE;
 
+// Frame allocator that uses the boot info memory regions
 pub struct BootInfoFrameAllocator {
     frame_allocator: physical_memory::BitmapFrameAllocator,
 }
@@ -32,7 +34,7 @@ impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
     }
 }
 
-// Create page table types with proper alignment and size constraints
+// Page table manager that handles mapping virtual addresses to physical frames
 pub struct PageTableManager {
     mapper: Mapper<'static, Size4KiB>,
     frame_allocator: BootInfoFrameAllocator,
@@ -122,7 +124,7 @@ pub fn init_paging(physical_memory_offset: u64) -> PageTableManager {
         // Allocate physical frame and map it to virtual address with read/write access
         pager_manager.map_to(virt_page, 
                              PhysFrame::containing_address(VirtAddr::from_u64(current_addr)), 
-                             TABLE_FLAGS | PRESENT);
+                             TABLE_FLAGS.bits());
 
         current_addr += Size4KiB::SIZE;
     }
@@ -140,7 +142,7 @@ pub fn init_paging(physical_memory_offset: u64) -> PageTableManager {
     pager_manager.map_to(
         x86_64::structures::paging::Page::<Size4KiB>::containing_address(virt_pml4_address),
         pml4_frame,
-        TABLE_FLAGS | PRESENT
+        TABLE_FLAGS.bits()
     );
 
     // Set up the PML4 register to point to our page table
@@ -150,7 +152,8 @@ pub fn init_paging(physical_memory_offset: u64) -> PageTableManager {
         let cr3 = Cr3::read();
         let mut new_cr3 = cr3;
         new_cr3.set_pml4_frame(pml4_frame);
-        Cr3::write(new_cr3);
+        // Fix: Call write with separate arguments
+        Cr3::write(new_cr3.frame(), new_cr3.flags());
     }
 
     pager_manager
