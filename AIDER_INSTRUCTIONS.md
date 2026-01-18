@@ -2,19 +2,27 @@
 
 ## 🎯 Vision & Goals
 
-**RustOS** is evolving into a capable, demo-worthy hobby OS that showcases modern kernel development in Rust. Our journey:
+**RustOS** is becoming a feature-rich, demo-worthy hobby OS that showcases what's possible with modern Rust kernel development. Our journey:
 
-- **Foundation Complete**: Boot, interrupts, memory management, and hardware drivers ✓
-- **Current Phase**: Process management and multitasking
-- **Near Future**: Virtual filesystem, userspace programs, and a working shell
-- **Ambitious Goals**: Networking stack, graphics modes, multi-core support, and a rich set of utilities
+- **Foundation Complete** ✓: Boot, interrupts, memory management, and hardware drivers (3,100+ LOC!)
+- **Current Phase**: Process management and multitasking (the kernel is about to come alive!)
+- **Near Future**: Virtual filesystem, userspace programs, and interactive shell
+- **Exciting Horizons**: TCP/IP networking, graphics/GUI, audio, real-time features, and POSIX compatibility
 
 **What makes RustOS unique:**
-- Pure Rust kernel with no legacy C code
-- Clean architecture built from first principles
-- Focus on understandability and educational value
-- Practical features: networking, graphics, real filesystem support
-- Goal: Boot to a functional shell that can run programs, manipulate files, and communicate over the network
+- Pure Rust kernel with memory safety guarantees and zero legacy C code
+- Clean architecture built from first principles - understandable and hackable
+- Rich feature set: networking, graphics, audio, multi-core support
+- Practical goal: Boot to shell → browse files → connect to internet → play audio/video
+- Educational value: Perfect reference for OS development in Rust
+
+**The Long-Term Dream:**
+- Boot to a graphical desktop environment with window manager
+- Run complex userspace applications (text editors, games, network clients)
+- Support multiple users with permissions and security
+- Networking: TCP/IP stack good enough to browse the web or host services
+- Multimedia: Play audio, display images/video
+- Development environment: Compile and run Rust programs *within* RustOS!
 
 ---
 
@@ -257,17 +265,298 @@ This is solid progress! The kernel has reached the critical milestone where it c
 - [ ] Configuration files (/etc/fstab, /etc/passwd)
 - [ ] Multiple virtual consoles (Alt+F1, Alt+F2, etc.)
 
+## Phase 13: Audio Subsystem
+**Goal**: Sound output for notifications, music, and games
+
+- [ ] AC97 or Intel HDA audio driver
+  - Detect audio controller via PCI
+  - Initialize DMA buffers for audio output
+  - Configure sample rate (44.1kHz standard)
+- [ ] Audio mixing layer
+  - Mix multiple audio streams
+  - Volume control per stream and master
+- [ ] WAV file playback
+  - Parse WAV headers (PCM format)
+  - Stream audio data to hardware
+- [ ] PC speaker driver (beep for simple sounds)
+  - Use PIT channel 2 for tone generation
+- [ ] Sound effects API for userspace
+  - syscalls: `audio_open()`, `audio_write()`, `audio_close()`
+- [ ] Demo: Play startup sound on boot
+- [ ] Demo: Music player program (`play song.wav`)
+
+## Phase 14: Advanced Drivers & Hardware
+**Goal**: Support more devices for richer functionality
+
+- [ ] USB subsystem (UHCI/OHCI/EHCI/xHCI)
+  - USB controller driver (start with UHCI - simpler)
+  - USB device enumeration
+  - Hub support
+- [ ] USB mass storage (flash drives)
+  - SCSI command set for USB drives
+  - Hot-plug detection and mounting
+- [ ] USB keyboard/mouse support
+  - HID (Human Interface Device) protocol
+  - Fallback when PS/2 unavailable
+- [ ] Real-time clock (RTC/CMOS)
+  - Read current date/time
+  - Set system time
+  - Persist time across reboots
+- [ ] AHCI/SATA driver (modern disk interface)
+  - Replace PIO mode ATA with DMA transfers
+  - Much faster disk I/O
+- [ ] NVMe driver (modern SSDs)
+  - PCIe-based storage
+  - Extremely high performance
+- [ ] Serial console improvements
+  - Full terminal emulation over serial
+  - Useful for debugging and remote access
+
+## Phase 15: Memory Management Enhancements
+**Goal**: More sophisticated and efficient memory handling
+
+- [ ] Slab allocator for kernel objects
+  - Replace linked-list heap with slab caches
+  - Faster allocation for common object sizes
+  - Reduces fragmentation
+- [ ] Copy-on-write (COW) for fork()
+  - Don't copy memory immediately on fork
+  - Mark pages read-only and copy on write
+  - Huge performance improvement
+- [ ] Demand paging and page faults
+  - Only load pages when accessed
+  - Page fault handler allocates on demand
+- [ ] Swap space support
+  - Write unused pages to disk
+  - Reclaim when memory pressure is high
+  - Allows running larger programs
+- [ ] Memory-mapped files (mmap)
+  - Map files directly into process address space
+  - Efficient file I/O without read/write syscalls
+- [ ] Huge pages (2MB/1GB pages)
+  - Reduce TLB pressure for large allocations
+  - Performance boost for memory-intensive apps
+- [ ] NUMA awareness (for multi-socket systems)
+  - Allocate memory on same node as CPU
+  - Important for scalability
+
+## Phase 16: Inter-Process Communication (IPC)
+**Goal**: Let processes communicate and coordinate
+
+- [ ] Pipes (anonymous and named/FIFO)
+  - `pipe()` syscall creates fd pair
+  - Write to one end, read from other
+  - Shell pipelines: `cat file.txt | grep foo`
+- [ ] Unix domain sockets
+  - Socket-based IPC on local machine
+  - Used by many Unix daemons
+- [ ] Shared memory segments
+  - Multiple processes map same physical memory
+  - Fastest IPC method
+  - Requires synchronization (semaphores)
+- [ ] Message queues
+  - Send/receive discrete messages
+  - Queue-based communication
+- [ ] Signals
+  - SIGTERM, SIGKILL, SIGUSR1, etc.
+  - `kill()` syscall to send signals
+  - Signal handlers in userspace
+- [ ] Event notification (epoll/kqueue-like)
+  - Monitor multiple fds for events
+  - Efficient I/O multiplexing
+  - Critical for network servers
+
+## Phase 17: Security & Permissions
+**Goal**: Multi-user support and access control
+
+- [ ] User and group IDs
+  - Each process has UID/GID
+  - Root (UID 0) vs normal users
+- [ ] File permissions (rwxrwxrwx)
+  - Owner, group, other permission bits
+  - Check permissions on open/read/write
+- [ ] Password authentication
+  - /etc/passwd and /etc/shadow files
+  - Hash passwords with bcrypt or argon2
+- [ ] Login program
+  - Prompt for username/password
+  - Start shell with correct UID if authenticated
+- [ ] Sudo mechanism
+  - Allow unprivileged users to run commands as root
+  - /etc/sudoers configuration
+- [ ] Capability-based security (optional, advanced)
+  - Fine-grained permissions beyond UID/GID
+  - Inspired by modern systems like Fuchsia
+
+## Phase 18: Graphical User Interface (GUI)
+**Goal**: Window manager and graphical applications
+
+- [ ] Window manager (compositing or stacking)
+  - Manage window positions, sizes, z-order
+  - Window decorations (title bar, close button)
+  - Mouse-based window dragging/resizing
+- [ ] Graphics library for userspace
+  - Drawing primitives accessible via syscalls
+  - Or shared framebuffer with coordination
+- [ ] Simple GUI toolkit
+  - Buttons, text boxes, labels, menus
+  - Event-driven programming model
+- [ ] Demo applications:
+  - Calculator
+  - Text editor with GUI
+  - File manager (browse directories graphically)
+  - Image viewer (BMP/PNG support)
+- [ ] Desktop environment
+  - Taskbar, application launcher
+  - System tray for notifications
+  - Background wallpaper
+- [ ] Support for bitmap fonts and TrueType fonts
+  - Font rendering with anti-aliasing
+
+## Phase 19: Developer Tools & Self-Hosting
+**Goal**: Develop software within RustOS itself
+
+- [ ] Port Rust compiler (rustc) to RustOS
+  - Cross-compile rustc for RustOS target
+  - Or run rustc via emulation layer
+- [ ] Implement `cargo` equivalent
+  - Build tool for Rust projects
+  - Dependency management
+- [ ] Text-based IDE or advanced editor
+  - Syntax highlighting
+  - Code completion (LSP?)
+- [ ] Debugger (gdb-like)
+  - Set breakpoints, step through code
+  - Inspect variables and memory
+- [ ] Version control (git port)
+  - Clone, commit, push/pull repos
+  - Manage RustOS development within RustOS!
+- [ ] Shell scripting language
+  - Bash-compatible or custom scripting
+  - Automate tasks and system configuration
+- [ ] Package manager
+  - Install/update/remove software packages
+  - Dependency resolution
+  - Repository of pre-built binaries
+
+## Phase 20: Advanced Networking & Services
+**Goal**: Production-quality network services
+
+- [ ] IPv6 support
+  - Parse IPv6 headers and addresses
+  - ICMPv6, NDP (neighbor discovery)
+- [ ] Network bridging and routing
+  - Forward packets between interfaces
+  - NAT (Network Address Translation)
+- [ ] Firewall/packet filter
+  - iptables-like rules
+  - Drop/accept based on criteria
+- [ ] TLS/SSL support
+  - Encrypt network connections
+  - HTTPS client and server
+  - Port mbedtls or rustls library
+- [ ] SSH server and client
+  - Secure remote shell access
+  - SCP for file transfer
+- [ ] NFS or SMB client
+  - Mount network filesystems
+  - Access files on remote servers
+- [ ] Web browser (ambitious!)
+  - HTML parser and renderer
+  - CSS layout engine
+  - JavaScript interpreter (or skip for now)
+  - Goal: Browse simple websites
+- [ ] Multiplayer game demo
+  - Network-based game using TCP/UDP
+  - Shows off networking and graphics
+
+## Phase 21: Performance & Optimization
+**Goal**: Make RustOS fast and efficient
+
+- [ ] Profiling infrastructure
+  - Sample-based profiler (perf-like)
+  - Identify hotspots in kernel and userspace
+- [ ] Lazy TLB flushing
+  - Don't flush TLB unnecessarily on context switch
+  - Track TLB generation numbers
+- [ ] RCU (Read-Copy-Update) synchronization
+  - Lock-free reads for shared data
+  - Scalable concurrency primitive
+- [ ] Zero-copy networking
+  - DMA directly to userspace buffers
+  - Avoid copying data through kernel
+- [ ] Async I/O (io_uring style)
+  - Submit I/O operations without blocking
+  - Efficient for high-throughput apps
+- [ ] JIT compilation for eBPF
+  - Allow userspace to inject kernel code safely
+  - Packet filtering, tracing, monitoring
+- [ ] Power management (ACPI S-states)
+  - Suspend to RAM, hibernate
+  - CPU frequency scaling (SpeedStep/Turbo)
+  - Laptop battery life optimization
+
+## Phase 22: Virtualization & Containers
+**Goal**: Run RustOS as hypervisor or in containers
+
+- [ ] KVM-like virtualization support
+  - Use hardware virtualization (VT-x/AMD-V)
+  - Run guest VMs inside RustOS
+- [ ] Paravirtualization drivers
+  - VirtIO for efficient I/O in VMs
+  - Run RustOS as guest with better performance
+- [ ] Container runtime (Docker-like)
+  - Namespaces for process isolation
+  - cgroups for resource limits
+  - Overlay filesystem for layers
+- [ ] Micro-VM support (Firecracker-style)
+  - Extremely lightweight VMs
+  - Fast boot times for serverless workloads
+
+## Phase 23: Exotic & Fun Features
+**Goal**: Unique features that make RustOS stand out
+
+- [ ] WASM runtime
+  - Run WebAssembly modules in userspace
+  - Sandboxed execution environment
+  - Could run web apps locally
+- [ ] Live kernel patching
+  - Update kernel code without reboot
+  - Critical for long-running systems
+- [ ] Time travel debugging
+  - Record execution and replay
+  - Step backwards through program history
+- [ ] Distributed filesystem (plan9-like)
+  - Every resource is a file
+  - Mount remote filesystems transparently
+- [ ] Microkernel architecture experiment
+  - Move drivers to userspace
+  - IPC-based communication
+  - Compare with monolithic kernel performance
+- [ ] Formal verification of critical paths
+  - Prove correctness of scheduler, memory allocator
+  - Use Rust's type system + external tools
+- [ ] Run on exotic architectures
+  - RISC-V port
+  - ARM64/AArch64 port
+  - Test portability of Rust kernel code
+
 ---
 
-## 🎯 Immediate Priorities (Next 5 Tasks)
+## 🎯 Immediate Priorities (Next 10 Tasks)
 
 1. **Fix context switching** - The current assembly in src/process.rs has issues. Use naked functions or separate .asm files.
 2. **Timer-based preemptive multitasking** - Hook scheduler into PIT interrupt for automatic task switching.
 3. **Kernel thread spawning** - Create API to spawn simple kernel tasks for testing.
-4. **Ring 3 user mode** - Update GDT and implement privilege switching so we can run userspace code.
-5. **Syscall interface** - Implement int 0x80 handler and basic write/exit syscalls.
+4. **Process termination and cleanup** - Implement exit() and zombie reaping so processes can finish cleanly.
+5. **Ring 3 user mode** - Update GDT and implement privilege switching so we can run userspace code.
+6. **Syscall interface** - Implement int 0x80 handler and dispatch table.
+7. **Basic syscalls: write/read/exit/getpid** - Core syscalls needed for any program.
+8. **User stack setup** - Separate kernel/user stacks with proper privilege levels.
+9. **VFS layer foundation** - Inode abstraction and file operations structure.
+10. **tmpfs implementation** - In-memory filesystem to test VFS without disk complexity.
 
-Once these are done, RustOS will be able to run multiple concurrent tasks and execute user programs!
+Once these are done, RustOS will run multitasking userspace programs with file I/O! That's the critical milestone that unlocks everything else.
 
 ---
 
@@ -290,4 +579,14 @@ RUSTFLAGS="-D warnings" cargo build --release
 ## Current Status
 **Phase**: 4 - Process Management (multitasking foundation)
 **Next Task**: Fix context switching assembly code
-**Vision**: Building toward a functional shell with networking and graphics!
+**Lines of Code**: 3,100+ lines of pure Rust kernel code!
+**Completed Sessions**: 20 sessions, 22 tasks done
+
+**The Vision is Expanding**:
+- Short term: Functional shell with file I/O and multitasking
+- Medium term: Networking stack (TCP/IP) and graphical environment
+- Long term: Self-hosting development environment, multimedia support, virtualization
+- Dream goal: A complete OS that's fun to use and impressive to demo!
+
+**Why This Matters**:
+RustOS is proving that Rust is an excellent choice for OS development. Memory safety without garbage collection, zero-cost abstractions, and fearless concurrency make it possible to build a sophisticated kernel that's both safe and performant. Every feature we add demonstrates another aspect of systems programming in Rust.
