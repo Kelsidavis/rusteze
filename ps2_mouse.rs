@@ -1,19 +1,26 @@
 // src/ps2_mouse.rs
+
 use crate::io::{inb, outb};
 use x86_64::instructions::interrupts;
 
-/// PS/2 Mouse constants
+/// PS/2 mouse port addresses
 const MOUSE_DATA_PORT: u16 = 0x60;
 const MOUSE_COMMAND_PORT: u16 = 0x64;
 
-// PS/2 mouse commands
-const COMMAND_READ_CONFIG: u8 = 0x20;
-const COMMAND_WRITE_CONFIG: u8 = 0x60;
-const COMMAND_ENABLE_DATA_REPORTING: u8 = 0xF4;
-const COMMAND_DISABLE_DATA_REPORTING: u8 = 0xF5;
+// Mouse commands
+const CMD_READ_STATUS: u8 = 0xE9;      // Read status register
+const CMD_WRITE_CONFIG: u8 = 0x60;     // Write configuration byte
+const CMD_ENABLE_MOUSE: u8 = 0xA8;    // Enable mouse data reporting
+const CMD_DISABLE_MOUSE: u8 = 0xA7;   // Disable mouse data reporting
+const CMD_SET_SAMPLE_RATE: u8 = 0xF3; // Set sample rate
 
-/// Mouse packet structure (3 bytes for standard mouse)
-#[derive(Debug, Clone)]
+// Status register bits (from PS/2 controller)
+const STATUS_DATA_READY: u8 = 1 << 0;     // Data ready in output buffer
+const STATUS_COMMAND_BYTE: u8 = 1 << 2;   // Command byte received, not data
+const STATUS_MOUSE_INTERRUPT: u8 = 1 << 5; // Mouse interrupt occurred
+
+/// PS/2 mouse packet structure (3 bytes for standard mice)
+#[derive(Debug)]
 pub struct MouseEvent {
     pub left_button: bool,
     pub right_button: bool,
@@ -87,10 +94,10 @@ impl Ps2MouseDriver {
     /// Initializes the PS/2 mouse controller and enables data reporting
     pub unsafe fn init(&mut self) {
         // Wait for input buffer to be empty (if needed)
-        while inb(MOUSE_COMMAND_PORT) & 0x1 != 0 {}
+        while inb(MOUSE_COMMAND_PORT) & STATUS_DATA_READY != 0 {}
         
         // Send command to read configuration byte
-        outb(MOUSE_COMMAND_PORT, COMMAND_READ_CONFIG);
+        outb(MOUSE_COMMAND_PORT, CMD_READ_STATUS);
         
         let config = inb(MOUSE_DATA_PORT); 
         
@@ -98,12 +105,13 @@ impl Ps2MouseDriver {
         let new_config = config | 0x10;
         
         // Send command to write configuration byte
-        outb(MOUSE_COMMAND_PORT, COMMAND_WRITE_CONFIG);
+        outb(MOUSE_COMMAND_PORT, CMD_WRITE_CONFIG);
+        while inb(MOUSE_COMMAND_PORT) & STATUS_DATA_READY != 0 {}
         outb(MOUSE_DATA_PORT, new_config);
 
         // Enable data reporting from mouse
-        while inb(MOUSE_COMMAND_PORT) & 0x1 != 0 {}
-        outb(MOUSE_COMMAND_PORT, COMMAND_ENABLE_DATA_REPORTING);
+        while inb(MOUSE_COMMAND_PORT) & STATUS_DATA_READY != 0 {}
+        outb(MOUSE_COMMAND_PORT, CMD_ENABLE_MOUSE);
         
         self.enabled = true;
     }
@@ -196,5 +204,8 @@ unsafe extern "C" fn ps2_mouse_interrupt(_stack_frame: &mut x86_64::structures::
 pub fn init_mouse() {
     unsafe {
         MOUSE_DRIVER.lock().init();
+        
+        // Set up interrupt handler in IDT (IRQ12 = vector 36)
+        idt::set_handler(36, ps2_mouse_interrupt);
     }
 }
