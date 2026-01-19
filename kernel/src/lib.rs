@@ -96,14 +96,14 @@ pub fn load_elf_binary(
 ) -> Result<PhysFrame, ElfError> {
     // Validate ELF header magic bytes
     if !elf_data.starts_with(&[0x7F, b'E', b'L', b'F']) {
-        return Err(ElfError::InvalidMagic));
+        return Err(ElfError::InvalidMagic);
     }
 
     let elf_header = unsafe { &*(elf_data.as_ptr() as *const ElfHeader) };
 
     // Check for 64-bit ELF (we only support x86_64)
     if elf_header.e_ident[4] != 2 {
-        return Err(ElfError::UnsupportedArchitecture));
+        return Err(ElfError::UnsupportedArchitecture);
     }
 
     let entry_point = elf_header.e_entry;
@@ -131,7 +131,7 @@ pub fn load_elf_binary(
     }
 
     if total_memory_size == 0 || prog_headers.is_empty() {
-        return Err(ElfError::BadProgramHeader));
+        return Err(ElfError::BadProgramHeader);
     }
     
     let phys_frame = crate::physical_memory::allocate_frames(total_memory_size / 4096)
@@ -188,7 +188,7 @@ pub fn init_system() -> Result<(), ElfError> {
     let valid_elf = &include_bytes!("../assets/test.elf")[..];
     
     if !valid_elf.starts_with(&[0x7F, b'E', b'L', b'F']) {
-        return Err(ElfError::InvalidMagic));
+        return Err(ElfError::InvalidMagic);
     }
 
     // Initialize process manager
@@ -232,7 +232,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     let pager_manager = paging::init_paging(0x1_0000);
     
     if pager_manager.map_to(
-        x86_64::structures::paging::Page::<Size4KiB>::containing_address(VirtAddr::new(0x2_0000)),
+        x86_64::structures::paging::Page::<Size4KiB>::containing_address(x86_64::VirtAddr::new(0x2_0000)),
         PhysFrame::containing_address(x86_64::PhysAddr::new(0x3_0000)),
         paging::TABLE_FLAGS
     ).is_ok() {
@@ -395,3 +395,4 @@ fn panic(info: &PanicInfo) -> ! {
         core::hint::spin_loop();
     }
 }
+```
