@@ -119,8 +119,7 @@ impl Inode for DevInode {
     #[inline]
     unsafe fn open_file(
         &self,
-        _flags: u32,
-        // We don't need the current process context here since we're just creating an in-memory device
+        _flags: u32, // We don't need the current process context here since we're just creating an in-memory device
     ) -> Option<File> {
         
         let file = File::new(self as *const Self, 0);
