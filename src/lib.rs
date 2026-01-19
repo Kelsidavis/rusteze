@@ -20,6 +20,7 @@ mod ps2_mouse; // Added mouse module
 mod pci;  // New PCI enumeration module
 mod ata;  // ATA/IDE disk driver
 mod process; // Process management and scheduling
+mod syscall; // System call interface
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -99,6 +100,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Enable hardware interrupts
     idt::enable_interrupts();
     println!("Hardware interrupts enabled");
+    println!("System call interface ready (int 0x80)");
 
     // Initialize PCI enumeration (new feature)
     let pci_devices = pci::init_pci();

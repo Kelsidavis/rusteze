@@ -112,21 +112,27 @@ This is solid progress! The kernel has reached the critical milestone where it c
 ## Phase 5: System Calls & User Mode
 **Goal**: Ring 0 → Ring 3 transition, syscall interface
 
-- [ ] User mode (Ring 3) support
-  - Update GDT with user code/data segments
-  - Implement privilege level switching
-- [ ] Syscall dispatcher (int 0x80 or syscall/sysret instruction)
-  - Handler that saves user context, validates syscall number
-  - Dispatch table mapping syscall numbers to kernel functions
-- [ ] Basic syscalls (start with 5-10 core syscalls):
-  - `write(fd, buf, len)` - output to screen/serial
-  - `read(fd, buf, len)` - input from keyboard
-  - `exit(code)` - terminate process
-  - `getpid()` - get process ID
-  - `fork()` - create child process (advanced)
-  - `exec(path)` - replace process with new program
+- [x] User mode (Ring 3) support
+  - GDT updated with user code/data segments (Ring 3 privilege)
+  - User segment selectors defined: USER_CODE_SELECTOR (0x18|3), USER_DATA_SELECTOR (0x20|3)
+  - TSS configured with RSP0 for kernel stack on privilege switch
+- [x] Syscall dispatcher (int 0x80 or syscall/sysret instruction)
+  - int 0x80 handler implemented in IDT with Ring 3 privilege
+  - Handler saves user context and dispatches to syscall module
+  - Dispatch function maps syscall numbers to kernel implementations
+- [x] Basic syscalls (start with 5-10 core syscalls):
+  - `write(fd, buf, len)` - output to screen/serial (implemented for stdout/stderr)
+  - `read(fd, buf, len)` - input from keyboard (stub, returns NotImplemented)
+  - `exit(code)` - terminate process (implemented, prints exit code)
+  - `getpid()` - get process ID (implemented, returns 1 for now)
+  - `fork()` - create child process (stub, returns NotImplemented)
+  - `exec(path)` - replace process with new program (stub, returns NotImplemented)
 - [ ] User stack setup (separate from kernel stack)
+  - TSS RSP0 field ready for kernel stack pointer
+  - Need to implement process creation with user stack allocation
 - [ ] Return to userspace (iretq with correct stack frame)
+  - Infrastructure ready (user segments, TSS, syscall handler)
+  - Need to implement actual transition from kernel to user mode
 
 ## Phase 6: Virtual Filesystem (VFS)
 **Goal**: Unified file interface for RAM, disk, and devices

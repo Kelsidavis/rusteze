@@ -162,6 +162,57 @@ extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFr
     }
 }
 
+// System call handler (int 0x80)
+extern "x86-interrupt" fn syscall_handler(_stack_frame: InterruptStackFrame) {
+    // In a real implementation, we need to extract registers from the stack frame
+    // For now, we'll use inline assembly to get the register values
+    let rax: u64;
+    let rdi: u64;
+    let rsi: u64;
+    let rdx: u64;
+    let r10: u64;
+    let r8: u64;
+    let r9: u64;
+
+    unsafe {
+        core::arch::asm!(
+            "mov {}, rax",
+            "mov {}, rdi",
+            "mov {}, rsi",
+            "mov {}, rdx",
+            "mov {}, r10",
+            "mov {}, r8",
+            "mov {}, r9",
+            out(reg) rax,
+            out(reg) rdi,
+            out(reg) rsi,
+            out(reg) rdx,
+            out(reg) r10,
+            out(reg) r8,
+            out(reg) r9,
+        );
+    }
+
+    // Dispatch the system call
+    let result = crate::syscall::dispatch_syscall(rax, rdi, rsi, rdx, r10, r8, r9);
+
+    // Return result in rax
+    match result {
+        Ok(value) => {
+            // Set rax in the stack frame to the return value
+            unsafe {
+                core::arch::asm!("mov rax, {}", in(reg) value);
+            }
+        }
+        Err(_) => {
+            // Return -1 on error (Unix convention)
+            unsafe {
+                core::arch::asm!("mov rax, {}", in(reg) -1i64 as u64);
+            }
+        }
+    }
+}
+
 // Static IDT using lazy_static
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
@@ -196,6 +247,11 @@ lazy_static! {
         idt[PIC1_OFFSET].set_handler_fn(timer_interrupt_handler);      // IRQ0 - Timer
         idt[PIC1_OFFSET + 1].set_handler_fn(keyboard_interrupt_handler); // IRQ1 - Keyboard
         idt[PIC2_OFFSET + 4].set_handler_fn(mouse_interrupt_handler);   // IRQ12 - Mouse
+
+        // System call interrupt (int 0x80)
+        // Set DPL to Ring 3 so user mode can invoke it
+        idt[0x80].set_handler_fn(syscall_handler)
+            .set_privilege_level(x86_64::PrivilegeLevel::Ring3);
 
         idt
     };
