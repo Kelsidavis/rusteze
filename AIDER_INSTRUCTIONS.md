@@ -2,27 +2,32 @@
 
 ## 🎯 Vision & Goals
 
-**RustOS** is becoming a feature-rich, demo-worthy hobby OS that showcases what's possible with modern Rust kernel development. Our journey:
+**RustOS** is evolving into a showcase operating system - a fully-featured, demo-worthy OS that proves modern systems programming in pure Rust. Our journey:
 
 - **Foundation Complete** ✓: Boot, interrupts, memory management, and hardware drivers (3,100+ LOC!)
-- **Current Phase**: Process management and multitasking (the kernel is about to come alive!)
+- **Current Phase**: Process management and multitasking (bringing the kernel to life!)
 - **Near Future**: Virtual filesystem, userspace programs, and interactive shell
-- **Exciting Horizons**: TCP/IP networking, graphics/GUI, audio, real-time features, and POSIX compatibility
+- **Exciting Horizons**: TCP/IP networking, graphics/GUI, audio, distributed systems, and real-time features
 
 **What makes RustOS unique:**
 - Pure Rust kernel with memory safety guarantees and zero legacy C code
 - Clean architecture built from first principles - understandable and hackable
-- Rich feature set: networking, graphics, audio, multi-core support
-- Practical goal: Boot to shell → browse files → connect to internet → play audio/video
-- Educational value: Perfect reference for OS development in Rust
+- Ambitious feature roadmap: networking, graphics, audio, containers, distributed computing
+- Practical goal: Boot to shell → browse files → connect to internet → play audio/video → run distributed workloads
+- Educational value: Perfect reference for modern OS development in Rust
+- Research platform: Experiment with novel OS concepts in a safe, modern language
 
 **The Long-Term Dream:**
-- Boot to a graphical desktop environment with window manager
-- Run complex userspace applications (text editors, games, network clients)
-- Support multiple users with permissions and security
-- Networking: TCP/IP stack good enough to browse the web or host services
-- Multimedia: Play audio, display images/video
-- Development environment: Compile and run Rust programs *within* RustOS!
+- Boot to a graphical desktop environment with compositing window manager
+- Run complex userspace applications (IDEs, games, network services, multimedia apps)
+- Self-hosting: Compile and run Rust programs *within* RustOS
+- Support multiple users with robust security and permissions
+- Networking: Production-quality TCP/IP stack capable of serving web traffic
+- Multimedia: Full audio/video playback with hardware acceleration
+- Development environment: Write, compile, debug, and version control code entirely within RustOS
+- Distributed capabilities: Microservices, service mesh, distributed filesystem
+- Container orchestration: Run isolated workloads with resource limits
+- Research features: Formal verification, novel scheduling algorithms, capability-based security
 
 ---
 
@@ -153,6 +158,12 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - Read line from stdin
   - Parse into command + args
   - Fork/exec or builtin dispatch
+- [ ] Environment variables
+  - PATH, HOME, USER, etc.
+  - Export and access from programs
+- [ ] Command history and editing
+  - Arrow keys for previous commands
+  - Basic readline functionality
 
 ## Phase 8: Storage & Real Filesystem
 **Goal**: Persistent storage with a real filesystem
@@ -252,18 +263,38 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - `grep`, `wc`, `head`, `tail`
   - `date`, `uptime`, `free`
   - `kill` (send signals to processes)
+  - `find` - search for files
+  - `tar` - archive and compress files
+  - `df` - disk space usage
+  - `top` / `htop` - process monitor
 - [ ] Terminal emulator improvements
   - ANSI escape code support (colors, cursor movement)
   - Scrollback buffer
+  - 256-color support
+  - Unicode/UTF-8 support
 - [ ] Text editor (simple vi-like or ed-like)
   - Open, edit, save files from the shell
+  - Syntax highlighting
+  - Search and replace
 - [ ] Simple games or demos:
   - Snake or Tetris in text mode
   - Mandelbrot fractal renderer in graphics mode
   - Starfield or plasma effect
+  - Pong or Breakout
+  - Roguelike dungeon crawler
+  - Demo scene effects (fire, water, etc.)
 - [ ] Boot splash screen or logo
+  - Animated boot sequence
+  - Progress indicators
 - [ ] Configuration files (/etc/fstab, /etc/passwd)
 - [ ] Multiple virtual consoles (Alt+F1, Alt+F2, etc.)
+- [ ] Tab completion in shell
+  - File/directory completion
+  - Command completion
+- [ ] Scripting with pipes and redirection
+  - `cmd1 | cmd2`
+  - `cmd > file`, `cmd >> file`
+  - `cmd < file`
 
 ## Phase 13: Audio Subsystem
 **Goal**: Sound output for notifications, music, and games
@@ -541,6 +572,330 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - ARM64/AArch64 port
   - Test portability of Rust kernel code
 
+## Phase 24: Video & Multimedia
+**Goal**: Rich media playback and processing capabilities
+
+- [ ] Video decoder support (H.264/H.265)
+  - Software decoding initially
+  - Parse video container formats (MP4, MKV)
+  - Demultiplex video/audio streams
+- [ ] Hardware video acceleration
+  - VA-API or similar acceleration API
+  - GPU-accelerated decoding
+  - Drastically reduce CPU usage for video
+- [ ] Image format support
+  - JPEG, PNG, GIF, BMP decoders
+  - Basic image viewer application
+  - Thumbnail generation
+- [ ] Video player application
+  - Play video files with audio sync
+  - Playback controls (play, pause, seek)
+  - Fullscreen mode
+- [ ] Webcam support (USB Video Class)
+  - V4L2-like API for video capture
+  - Stream video from webcam
+  - Demo: Simple photo booth app
+- [ ] Screen recording
+  - Capture framebuffer to video file
+  - Useful for creating demos of RustOS itself
+- [ ] 2D graphics acceleration
+  - GPU-accelerated rendering for GUI
+  - Modern compositing techniques
+- [ ] 3D graphics support (OpenGL/Vulkan-like)
+  - GPU drivers (start with simple VESA, then Intel/AMD/NVIDIA)
+  - 3D rendering pipeline
+  - Demo: Rotating cube, 3D games
+
+## Phase 25: Real-Time & Embedded Features
+**Goal**: Make RustOS viable for time-critical applications
+
+- [ ] Real-time scheduler (SCHED_FIFO, SCHED_RR)
+  - Preemptible kernel for low latency
+  - Priority inheritance for mutexes
+  - Bounded interrupt latency
+- [ ] High-resolution timers
+  - Microsecond or nanosecond precision
+  - Per-process timers
+  - Interval timers for periodic tasks
+- [ ] CPU isolation and affinity
+  - Pin processes to specific CPUs
+  - Isolate cores from scheduler
+  - Dedicated cores for real-time tasks
+- [ ] Interrupt threading
+  - Handle IRQs in kernel threads
+  - Prioritize interrupt handlers
+- [ ] Real-time preemption statistics
+  - Track worst-case latencies
+  - Identify sources of latency
+  - Profiling tools for RT performance
+- [ ] Watchdog timer support
+  - Detect and recover from system hangs
+  - Automatic reboot on failure
+- [ ] Deterministic memory allocation
+  - Pre-allocated pools for RT tasks
+  - No unbounded allocation in RT paths
+- [ ] CAN bus support (Controller Area Network)
+  - Common in automotive and industrial
+  - Real-time messaging protocol
+- [ ] GPIO and hardware I/O
+  - Direct hardware control for embedded use
+  - PWM, ADC, SPI, I2C interfaces
+
+## Phase 26: Distributed Systems & Clustering
+**Goal**: Scale RustOS across multiple machines
+
+- [ ] Cluster membership and discovery
+  - Automatic node discovery
+  - Heartbeat and failure detection
+  - Consensus protocol (Raft or Paxos)
+- [ ] Distributed shared memory (DSM)
+  - Shared memory across network
+  - Coherence protocol for consistency
+  - Transparent remote memory access
+- [ ] Remote procedure call (RPC) framework
+  - Language-neutral RPC (like gRPC)
+  - Service definition and code generation
+  - Async RPC for high performance
+- [ ] Distributed task scheduler
+  - Submit jobs to cluster
+  - Load balancing across nodes
+  - Fault tolerance and retry logic
+- [ ] Distributed filesystem (like GlusterFS)
+  - Replicated storage across nodes
+  - Automatic failover
+  - Consistent hashing for data placement
+- [ ] Service mesh implementation
+  - Sidecar proxies for microservices
+  - Traffic management, load balancing
+  - Observability and tracing
+- [ ] Container orchestration (Kubernetes-like)
+  - Deploy containers across cluster
+  - Automatic scaling and recovery
+  - Service discovery and networking
+- [ ] Distributed lock manager
+  - Coordinate access to shared resources
+  - Deadlock detection
+- [ ] Message queue system (like RabbitMQ)
+  - Pub/sub messaging
+  - Guaranteed delivery
+  - Topic-based routing
+
+## Phase 27: Advanced Filesystems
+**Goal**: Production-quality filesystem features
+
+- [ ] Journaling filesystem (like ext4)
+  - Transaction log for crash recovery
+  - Prevent corruption on power loss
+  - Fast fsck after crash
+- [ ] Copy-on-write filesystem (like Btrfs/ZFS)
+  - Snapshots and cloning
+  - Data integrity with checksums
+  - Transparent compression
+  - Deduplication
+- [ ] Encryption at rest
+  - Full-disk encryption (LUKS-like)
+  - Per-file encryption
+  - Key management
+- [ ] FUSE support (Filesystem in Userspace)
+  - Implement filesystems in userspace
+  - Safer than kernel modules
+  - Examples: sshfs, archive mounting
+- [ ] Network filesystems (NFS server)
+  - Export filesystems over network
+  - Concurrent access from multiple clients
+  - File locking
+- [ ] RAID support (software RAID)
+  - RAID 0, 1, 5, 6, 10
+  - Redundancy and performance
+  - Hot spare and rebuild
+- [ ] Filesystem quotas
+  - Limit disk usage per user
+  - Hard and soft limits
+  - Grace periods
+- [ ] Extended attributes (xattrs)
+  - Arbitrary metadata on files
+  - Used for security labels, etc.
+- [ ] Access Control Lists (ACLs)
+  - Fine-grained permissions beyond owner/group/other
+  - Support for complex permission scenarios
+
+## Phase 28: Observability & Monitoring
+**Goal**: Deep insight into system behavior
+
+- [ ] System-wide tracing (like DTrace/eBPF)
+  - Dynamic instrumentation
+  - Trace kernel and userspace
+  - Low overhead when not in use
+- [ ] Performance monitoring counters
+  - CPU performance counters (PMU)
+  - Cache hits/misses, branch prediction
+  - Memory bandwidth monitoring
+- [ ] Flame graphs and profiling
+  - Visualize where time is spent
+  - Sample-based or instrumentation-based
+  - Kernel and userspace profiling
+- [ ] Metrics collection and export
+  - Prometheus-compatible metrics
+  - Time-series database integration
+  - CPU, memory, disk, network stats
+- [ ] Distributed tracing (like Jaeger)
+  - Trace requests across services
+  - Correlation IDs
+  - Latency analysis
+- [ ] Log aggregation
+  - Centralized logging
+  - Structured logging (JSON)
+  - Log search and filtering
+- [ ] Alerting system
+  - Define alert rules
+  - Notify on anomalies
+  - Integration with external systems
+- [ ] System call auditing
+  - Record all syscalls for security
+  - Replay and analysis
+  - Compliance and forensics
+- [ ] Network packet capture (tcpdump-like)
+  - Capture and analyze network traffic
+  - BPF filtering
+  - Protocol dissection
+
+## Phase 29: Fault Tolerance & High Availability
+**Goal**: Build a system that never goes down
+
+- [ ] Process supervision (like systemd)
+  - Automatic restart on crash
+  - Dependency management
+  - Service health checks
+- [ ] Checkpoint and restore
+  - Save process state to disk
+  - Restore from checkpoint
+  - Live migration of processes
+- [ ] Redundant components
+  - Multiple instances of critical services
+  - Automatic failover
+  - Leader election
+- [ ] Graceful degradation
+  - Continue operating with reduced functionality
+  - Fallback mechanisms
+  - Circuit breakers
+- [ ] Self-healing capabilities
+  - Detect and recover from errors automatically
+  - Automated diagnostics
+  - Corrective actions
+- [ ] Chaos engineering tools
+  - Inject faults deliberately
+  - Test resilience
+  - Network partitions, disk failures, etc.
+- [ ] Backup and disaster recovery
+  - Automated backups
+  - Point-in-time recovery
+  - Offsite replication
+- [ ] High-availability clustering
+  - Active-passive or active-active
+  - Shared storage or replicated
+  - Virtual IP failover
+
+## Phase 30: Novel Research Features
+**Goal**: Push the boundaries of OS design
+
+- [ ] Persistent memory support (NVDIMM)
+  - Byte-addressable persistent storage
+  - Direct access to persistent data structures
+  - Transaction support for crash consistency
+- [ ] Hardware transactional memory (HTM)
+  - Use Intel TSX or similar
+  - Lock-free data structures
+  - Speculative execution
+- [ ] Unikernel mode
+  - Single-address-space OS
+  - Specialized for one application
+  - Extreme performance and tiny footprint
+- [ ] Disaggregated memory
+  - Remote memory over RDMA
+  - Memory pooling across machines
+  - Scale memory independently of CPU
+- [ ] SmartNIC offloading
+  - Offload networking to hardware
+  - Kernel bypass for ultra-low latency
+  - DPDK-like performance
+- [ ] Confidential computing (SGX/SEV)
+  - Encrypted memory for sensitive workloads
+  - Trust boundary at CPU level
+  - Secure enclaves
+- [ ] Capability-based addressing
+  - Hardware-enforced memory safety
+  - CHERI-like architecture
+  - Eliminate spatial memory errors
+- [ ] Quantum-resistant cryptography
+  - Post-quantum algorithms
+  - Future-proof security
+  - Lattice-based, hash-based crypto
+- [ ] AI/ML accelerator support
+  - GPU compute for neural networks
+  - TPU or custom AI hardware
+  - ML inference in kernel or userspace
+- [ ] Blockchain integration
+  - Distributed consensus in OS
+  - Immutable audit logs
+  - Decentralized identity
+
+---
+
+## 🎬 Impressive Demo Ideas
+
+These are concrete demonstrations that would showcase RustOS capabilities:
+
+**Early Demos (Phases 4-8)**:
+- Boot animation showing kernel initialization steps
+- Multiple kernel threads printing different patterns simultaneously
+- Shell prompt responding to keyboard input with command history
+- File browser navigating tmpfs with cat/ls/mkdir
+- Simple calculator program in userspace
+
+**Medium Demos (Phases 9-13)**:
+- Graphical boot logo transitioning to desktop
+- Mouse-controlled GUI with draggable windows
+- Snake or Tetris game with graphics and keyboard control
+- Matrix-style falling characters in framebuffer
+- "Bad Apple" video playback with audio sync
+- Network ping utility showing RTT to remote hosts
+- Simple HTTP server serving files from RustOS
+- Music player with playlist and controls
+
+**Advanced Demos (Phases 14-20)**:
+- Multi-core benchmark showing linear scaling
+- 3D rotating cube or teapot with real-time rendering
+- Web browser displaying simple HTML pages
+- SSH into RustOS from another machine
+- Live migration of running process to another machine
+- Real-time audio effects (echo, reverb) on microphone input
+- Video chat application using webcam and network
+
+**Research Demos (Phases 21-30)**:
+- Distributed raytracer across cluster of RustOS nodes
+- Live kernel patching without reboot
+- Time-travel debugging of userspace program
+- Self-hosting: Compile and run Rust code entirely within RustOS
+- Container orchestration demo (deploy, scale, load balance)
+- Chaos engineering: Kill random processes, show self-healing
+- Formal verification proof of memory allocator correctness
+- WebAssembly application running in sandboxed environment
+- Neural network inference using GPU acceleration
+- Blockchain consensus across distributed RustOS cluster
+
+**Ultimate Demo** (The "Wow" Factor):
+Build a complete demo environment that shows:
+1. Boot to graphical desktop in <5 seconds
+2. Open terminal and run `neofetch` showing system info
+3. Browse filesystem with GUI file manager
+4. Play video with audio in media player
+5. Open text editor and write/compile/run Rust program
+6. Open web browser and load webpage from internet
+7. Start game (3D if possible) and play with keyboard/mouse
+8. SSH into remote RustOS machine and run commands
+9. Deploy containerized application across cluster
+10. Monitor everything in real-time dashboard with metrics
+
 ---
 
 ## 🎯 Immediate Priorities (Next 10 Tasks)
@@ -580,13 +935,28 @@ RUSTFLAGS="-D warnings" cargo build --release
 **Phase**: 4 - Process Management (multitasking foundation)
 **Next Task**: Fix context switching assembly code
 **Lines of Code**: 3,100+ lines of pure Rust kernel code!
-**Completed Sessions**: 20 sessions, 22 tasks done
+**Completed Sessions**: 10 sessions, 22 tasks done, 200+ tasks remaining
 
 **The Vision is Expanding**:
-- Short term: Functional shell with file I/O and multitasking
-- Medium term: Networking stack (TCP/IP) and graphical environment
-- Long term: Self-hosting development environment, multimedia support, virtualization
-- Dream goal: A complete OS that's fun to use and impressive to demo!
+- **Short term** (Weeks 1-4): Functional shell with file I/O and multitasking
+- **Medium term** (Months 2-6): Networking stack (TCP/IP), graphics/GUI, real filesystems
+- **Long term** (Months 6-12): Self-hosting, multimedia, multi-core, distributed systems
+- **Research horizons** (Year 2+): Advanced features like formal verification, novel architectures, production-quality networking
+
+**Milestone Goals**:
+1. **"Hello, World!"** - First userspace program runs (Phase 7)
+2. **"It's Alive!"** - Interactive shell with working filesystem (Phase 8)
+3. **"Look, Ma!"** - Graphical desktop with mouse support (Phase 9)
+4. **"On the Wire"** - Ping a remote server over network (Phase 10)
+5. **"Make Some Noise"** - Play audio from disk (Phase 13)
+6. **"Multiple Minds"** - Multi-core SMP with load balancing (Phase 11)
+7. **"Self-Aware"** - Compile and run Rust code within RustOS (Phase 19)
+8. **"Cloud Native"** - Container orchestration across cluster (Phase 26)
+9. **"Production Ready"** - High availability with fault tolerance (Phase 29)
+10. **"Research Showcase"** - Novel OS features published (Phase 30)
 
 **Why This Matters**:
 RustOS is proving that Rust is an excellent choice for OS development. Memory safety without garbage collection, zero-cost abstractions, and fearless concurrency make it possible to build a sophisticated kernel that's both safe and performant. Every feature we add demonstrates another aspect of systems programming in Rust.
+
+**The Expanding Roadmap**:
+With 200+ tasks across 30 phases, RustOS has grown from a simple hobby kernel into an ambitious research platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D acceleration, from single-core to clusters - RustOS aims to showcase the full spectrum of operating systems development.
