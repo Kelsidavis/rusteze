@@ -193,14 +193,14 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 ## Phase 6: Virtual Filesystem (VFS)
 **Goal**: Unified file interface for RAM, disk, and devices
 
-- [ ] VFS layer with inode abstraction
+- [x] VFS layer with inode abstraction
   - Define Inode, File, Dentry structures
   - Virtual operations: open, close, read, write, seek
   - Mount points and filesystem registration
-- [ ] File descriptor table (per process, array of File*)
+- [x] File descriptor table (per process, array of File*)
   - stdin (fd 0), stdout (fd 1), stderr (fd 2)
   - open() returns fd, read/write use fd
-- [ ] tmpfs (in-memory filesystem)
+- [x] tmpfs (in-memory filesystem)
   - Create files in RAM using heap allocator
   - Directory tree traversal (path parsing)
   - Implement open, read, write, mkdir, ls

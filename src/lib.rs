@@ -21,6 +21,8 @@ mod pci;  // New PCI enumeration module
 mod ata;  // ATA/IDE disk driver
 mod process; // Process management and scheduling
 mod syscall; // System call interface
+mod vfs;     // Virtual filesystem layer
+mod tmpfs;   // In-memory filesystem
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -192,6 +194,105 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Mark the task as complete
     println!("ATA/IDE driver (PIO mode) initialized successfully");
 
+    // Initialize VFS and tmpfs
+    println!("Initializing Virtual Filesystem (VFS)...");
+    let tmpfs = tmpfs::TmpFs::new();
+    println!("TmpFS mounted as root filesystem");
+
+    // Test VFS operations
+    use vfs::{OpenFlags, FileDescriptor, FileDescriptorTable};
+    use alloc::sync::Arc;
+
+    // Create a test file
+    match tmpfs.create_file("/test.txt") {
+        Ok(inode) => {
+            println!("Created /test.txt");
+
+            // Write to the file
+            let test_data = b"Hello from RustOS VFS!\n";
+            match inode.write(0, test_data) {
+                Ok(bytes) => println!("Wrote {} bytes to /test.txt", bytes),
+                Err(e) => println!("Failed to write: {}", e),
+            }
+
+            // Read back the file
+            let mut buffer = [0u8; 64];
+            match inode.read(0, &mut buffer) {
+                Ok(bytes) => {
+                    println!("Read {} bytes from /test.txt", bytes);
+                    if let Ok(s) = core::str::from_utf8(&buffer[..bytes]) {
+                        println!("Content: {}", s.trim());
+                    }
+                }
+                Err(e) => println!("Failed to read: {}", e),
+            }
+        }
+        Err(e) => println!("Failed to create /test.txt: {}", e),
+    }
+
+    // Create a directory
+    match tmpfs.create_directory("/home") {
+        Ok(_) => {
+            println!("Created /home directory");
+
+            // Create a file in the directory
+            match tmpfs.create_file("/home/welcome.txt") {
+                Ok(inode) => {
+                    println!("Created /home/welcome.txt");
+                    let msg = b"Welcome to the home directory!";
+                    if let Ok(bytes) = inode.write(0, msg) {
+                        println!("Wrote {} bytes to /home/welcome.txt", bytes);
+                    }
+                }
+                Err(e) => println!("Failed to create /home/welcome.txt: {}", e),
+            }
+        }
+        Err(e) => println!("Failed to create /home: {}", e),
+    }
+
+    // List root directory contents
+    match tmpfs.root().list() {
+        Ok(entries) => {
+            println!("Root directory contents:");
+            for entry in entries {
+                println!("  - {}", entry);
+            }
+        }
+        Err(e) => println!("Failed to list root: {}", e),
+    }
+
+    // Test file descriptor table
+    println!("Testing file descriptor table...");
+    let fd_table = FileDescriptorTable::new();
+
+    // Open test.txt via file descriptor
+    if let Ok(inode) = tmpfs.resolve_path("/test.txt") {
+        let fd = Arc::new(FileDescriptor::new(inode, OpenFlags::read_write()));
+        match fd_table.allocate(fd.clone()) {
+            Ok(fd_num) => {
+                println!("Allocated file descriptor {}", fd_num);
+
+                // Read via file descriptor
+                let mut buf = [0u8; 64];
+                match fd.read(&mut buf) {
+                    Ok(bytes) => {
+                        if let Ok(s) = core::str::from_utf8(&buf[..bytes]) {
+                            println!("Read via fd {}: {}", fd_num, s.trim());
+                        }
+                    }
+                    Err(e) => println!("Failed to read via fd: {}", e),
+                }
+
+                // Close the file descriptor
+                if fd_table.close(fd_num).is_ok() {
+                    println!("Closed file descriptor {}", fd_num);
+                }
+            }
+            Err(e) => println!("Failed to allocate fd: {}", e),
+        }
+    }
+
+    println!("VFS and tmpfs initialized successfully");
     println!("RustOS ready!");
 
     loop {
