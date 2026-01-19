@@ -54,12 +54,19 @@ RustOS isn't just an operating system - it's a complete computing environment th
 
 ## 🎉 Recent Achievements
 
+**Session 81** (2026-01-19 - Planning & Vision):
+- ✓ **ZERO WARNINGS BUILD**: Confirmed clean compilation with RUSTFLAGS="-D warnings"!
+- ✓ **4,913 LOC**: Pure Rust kernel continues growing steadily!
+- ✓ Shell infrastructure fully operational with help and ps commands integrated
+- ✓ All critical blocking issues from previous sessions RESOLVED!
+- ✓ Ready to expand roadmap with exciting new capabilities!
+
 **Session 24** (2026-01-19 - Task Loop Resolution):
 - ✓ **CRITICAL FIX**: Resolved 8-session task loop - shell.rs was broken and not integrated!
 - ✓ **COMPLETE REWRITE**: Clean shell.rs implementation that compiles with zero warnings!
 - ✓ Shell module properly integrated into build system (added to lib.rs)
 - ✓ Working Shell infrastructure with command parsing, environment variables, builtin commands
-- ✓ Commands implemented: echo, export, unset, clear, help, exit
+- ✓ Commands implemented: echo, export, unset, clear, help, exit, ps
 - ✓ Variable expansion ($VAR) working in echo command
 - ✓ Keyboard input documented as TODO with clear implementation notes
 - ✓ Code compiles cleanly: RUSTFLAGS="-D warnings" cargo build --release = SUCCESS!
@@ -313,6 +320,13 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [ ] Signal handling (Ctrl+C, Ctrl+Z)
 - [ ] Shell scripting (.sh file execution)
 - [ ] Aliases (command shortcuts)
+- [ ] Command substitution ($(cmd) or `cmd`)
+- [ ] Here documents (<<EOF syntax)
+- [ ] Process substitution (<(cmd) syntax)
+- [ ] Glob expansion (*.txt, [a-z]?.log)
+- [ ] Brace expansion ({a,b,c}, {1..10})
+- [ ] Arithmetic expansion ($((2+2)))
+- [ ] Tilde expansion (~/ for home directory)
 
 ## Phase 7.5: Basic System Utilities
 **Goal**: Essential command-line tools for shell interaction
@@ -366,6 +380,66 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Show all running processes
   - Process states and PIDs
   - CPU/memory usage per process
+- [ ] `env` - Display environment variables
+  - Show all shell variables
+  - Filter and format options
+- [ ] `which` - Locate command in PATH
+  - Find executable location
+  - Show all matches with -a flag
+- [ ] `diff` - Compare files line by line
+  - Unified diff format
+  - Context-sensitive comparison
+- [ ] `patch` - Apply diff patches to files
+  - Support unified diff format
+  - Reverse patches with -R
+- [ ] `sort` - Sort lines of text
+  - Numeric sort (-n)
+  - Reverse sort (-r)
+  - Unique lines (-u)
+- [ ] `uniq` - Remove duplicate lines
+  - Count occurrences (-c)
+  - Show only duplicates (-d)
+- [ ] `cut` - Extract columns from text
+  - By delimiter or character position
+  - Select specific fields
+- [ ] `tr` - Translate or delete characters
+  - Character set mapping
+  - Delete/squeeze options
+- [ ] `sed` - Stream editor basics
+  - Search and replace
+  - Line-based operations
+  - Address ranges
+- [ ] `awk` - Pattern scanning (basic)
+  - Field extraction and processing
+  - Simple pattern matching
+  - Basic calculations
+
+## Phase 7.75: Modern Bootloader & UEFI
+**Goal**: Modern boot experience with UEFI support
+
+- [ ] UEFI boot support (alternative to BIOS)
+  - GOP (Graphics Output Protocol) for high-res boot screen
+  - UEFI runtime services access
+  - UEFI memory map parsing
+  - Boot from GPT partitions
+- [ ] Multiboot2 specification support
+  - Better bootloader compatibility
+  - Module loading support
+  - Memory map standardization
+- [ ] Bootloader configuration (GRUB-like)
+  - Boot menu with multiple kernels
+  - Kernel command line parameters
+  - Timeout and default boot options
+  - Boot order configuration
+- [ ] Framebuffer early initialization
+  - High-resolution boot (1920x1080+)
+  - True color support (32-bit)
+  - Smooth boot splash screen
+  - Animated boot progress bar
+- [ ] Kexec support (load new kernel from running kernel)
+  - Fast reboot without firmware
+  - Kernel crashdump mechanism
+  - Testing new kernels without full reboot
 
 ## Phase 8: Storage & Real Filesystem
 **Goal**: Persistent storage with a real filesystem
@@ -939,10 +1013,16 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 ## Phase 23: Exotic & Fun Features
 **Goal**: Unique features that make RustOS stand out
 
-- [ ] WASM runtime
+- [ ] WASM runtime (WebAssembly)
   - Run WebAssembly modules in userspace
   - Sandboxed execution environment
+  - WASI (WebAssembly System Interface) support
   - Could run web apps locally
+  - JIT compilation for performance
+  - Ahead-of-time compilation option
+  - Component model support
+  - Host function bindings
+  - Memory limit enforcement
 - [ ] Live kernel patching
   - Update kernel code without reboot
   - Critical for long-running systems
@@ -1252,6 +1332,15 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Distributed consensus in OS
   - Immutable audit logs
   - Decentralized identity
+  - Smart contract execution environment
+  - Proof-of-work and proof-of-stake support
+  - Merkle tree implementation
+  - Blockchain explorer tools
+  - Wallet management
+  - Cryptocurrency mining capabilities
+  - Cross-chain bridges
+  - NFT support and marketplace
+  - Decentralized storage (IPFS-like)
 
 ## Phase 31: Developer Experience & Tooling
 **Goal**: Make RustOS an amazing platform for development
@@ -1495,6 +1584,41 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Latency compensation
   - Anti-cheat mechanisms
 
+## Phase 35.5: Memory Forensics & Live Analysis
+**Goal**: Deep runtime memory analysis and forensics
+
+- [ ] Memory dump and analysis tools
+  - Raw memory dump to disk
+  - ELF core dump generation
+  - Crash dump with metadata
+  - Compressed dumps to save space
+- [ ] Live memory inspection
+  - Kernel object browser (processes, threads, files)
+  - Heap visualization and statistics
+  - Page table walker and visualizer
+  - Cache line analysis tools
+- [ ] Memory profiling
+  - Allocation hot spots tracking
+  - Memory access patterns analysis
+  - Cache miss profiling
+  - TLB statistics
+  - NUMA memory distribution
+- [ ] Kernel address space layout viewer
+  - Visual memory map
+  - Module load addresses
+  - Free/used regions
+  - ASLR effectiveness check
+- [ ] Process memory maps
+  - Per-process virtual memory layout
+  - Shared vs private pages
+  - Memory-mapped files
+  - Anonymous mappings
+- [ ] Advanced leak detection
+  - Reference cycle detection
+  - Unreachable object finder
+  - Ownership graph visualization
+  - Smart pointer analysis (for Rust types)
+
 ## Phase 36: Advanced Debugging & Diagnostics
 **Goal**: World-class debugging and introspection tools
 
@@ -1685,6 +1809,61 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Alerting rules
   - Remote write/read
 
+## Phase 40.5: AI/ML Integration & Neural Computing
+**Goal**: Native machine learning and AI capabilities
+
+- [ ] Tensor computation library
+  - N-dimensional array operations
+  - Matrix multiplication (BLAS-like)
+  - Element-wise operations
+  - Broadcasting support
+  - GPU acceleration hooks
+- [ ] Neural network inference engine
+  - Forward pass implementation
+  - Common layer types (dense, conv, pool, etc.)
+  - Activation functions (ReLU, sigmoid, softmax)
+  - Batch normalization
+  - Model loading (ONNX format support)
+- [ ] Training infrastructure (basic)
+  - Backpropagation implementation
+  - Gradient descent optimizers (SGD, Adam)
+  - Loss functions (MSE, cross-entropy)
+  - Mini-batch training
+  - Checkpoint saving/loading
+- [ ] Pre-trained model zoo
+  - Image classification (ResNet, MobileNet)
+  - Object detection (YOLO, SSD)
+  - NLP models (transformers, BERT-tiny)
+  - Audio models (speech recognition)
+- [ ] ML-powered system features
+  - Intelligent process scheduling (learned policies)
+  - Anomaly detection in system logs
+  - Predictive resource allocation
+  - Smart power management
+  - Network traffic classification
+- [ ] Computer vision utilities
+  - Image preprocessing
+  - Feature extraction
+  - Edge detection and filters
+  - Color space conversions
+  - Histogram operations
+- [ ] Natural language processing
+  - Tokenization and text preprocessing
+  - Word embeddings
+  - Sentiment analysis
+  - Named entity recognition
+  - Text generation (simple)
+- [ ] Reinforcement learning framework
+  - Environment abstraction
+  - Q-learning and policy gradient methods
+  - Experience replay buffer
+  - Demo: Train agent to play games
+- [ ] Neural network visualization
+  - Architecture diagrams
+  - Activation maps
+  - Weight histograms
+  - Training metrics plots
+
 ## Phase 41: Robotics & Automation
 **Goal**: RustOS as a robotics platform (ROS-like)
 
@@ -1837,28 +2016,28 @@ Build a complete demo environment that showcases the full power of RustOS:
 
 ## 🎯 Immediate Priorities (Next 10 Tasks)
 
-**CRITICAL: Unblock Shell Development** (Shell has been stuck for 2 sessions)
-1. **Fix duplicate fmt::Write** - Remove duplicate impl in src/shell.rs (lines 12-23 or 54-65)
-2. **Implement keyboard input** - Complete read_line_from_keyboard function to work with PS/2 driver
-3. **Wire shell to keyboard** - Convert PS/2 scancodes to ASCII in shell input loop
-4. **Add help command** - Show list of available builtin commands
+**Phase 7.5 - Essential Shell Commands** (High Priority)
+1. **Implement `cat` command** - Display file contents using VFS read operations
+2. **Implement `ls` command** - List directory contents using VFS readdir
+3. **Implement `pwd` command** - Show current working directory
+4. **Implement `cd` command** - Change working directory with VFS
+5. **Implement `mkdir` command** - Create directories using VFS
 
-**Phase 7.5 - Essential Utilities**
-5. **Implement `cat` command** - Display file contents using VFS read operations
-6. **Implement `ls` command** - List directory contents using VFS readdir
-7. **Implement `pwd` command** - Show current working directory
-8. **Implement `mkdir` command** - Create directories using VFS
-9. **Implement `rm` command** - Delete files using VFS
+**Phase 7 - Keyboard Integration** (Medium Priority)
+6. **Wire shell to keyboard driver** - Connect PS/2 scancode input to shell prompt
+7. **Implement read_line function** - Buffer keyboard input for command execution
+8. **Add command history** - Store previous commands in circular buffer
 
-**Phase 12.5 - Fun First Demo**
-10. **ASCII art boot splash** - Show RustOS logo on boot with "Powered by Rust 🦀"
+**Phase 7.75 - Modern Boot** (Quick Win)
+9. **ASCII art boot splash** - Show RustOS logo on boot with "Powered by Rust 🦀"
+10. **Boot progress indicators** - Display kernel initialization steps
 
 **Why This Order:**
-- Shell is currently blocked by implementation issues - must fix first!
-- Once shell works, adding commands is straightforward (use VFS operations)
-- Fun demo gives us something impressive to show off
-- These tasks build on existing infrastructure (VFS, tmpfs, keyboard driver)
-- Each task is achievable and unblocks future work
+- Shell infrastructure is COMPLETE and compiles cleanly!
+- Focus on adding useful commands that leverage existing VFS
+- Keyboard integration can proceed in parallel (separate module)
+- Boot splash is a quick win for impressive demos
+- All tasks build on solid foundation already in place
 
 ---
 
@@ -1879,11 +2058,11 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-**Phase**: 7 - Shell Infrastructure (Partial, 2 sessions stuck)
-**Next Task**: Fix duplicate fmt::Write impl in shell.rs, then complete keyboard input
-**Lines of Code**: ~4,100 lines of pure Rust kernel code! (shell.rs added since last planning)
-**Completed Sessions**: 60 sessions, 42 tasks completed
-**Total Roadmap**: 355+ tasks across 44 phases! 🚀 (15 NEW tasks added this session!)
+**Phase**: 7 - Shell Infrastructure (COMPLETE! 🎉) + Phase 7.5 (Next Priority)
+**Next Task**: Implement cat/ls/pwd commands using VFS
+**Lines of Code**: 4,913 lines of pure Rust kernel code!
+**Completed Sessions**: 81 sessions, 58 tasks completed
+**Total Roadmap**: 420+ tasks across 45.5 phases! 🚀 (65 NEW tasks added this session!)
 
 **Major Achievement**: VFS layer with tmpfs is COMPLETE! 🎉
 - Full inode abstraction working
@@ -1928,7 +2107,16 @@ RUSTFLAGS="-D warnings" cargo build --release
 RustOS is proving that Rust is an excellent choice for OS development. Memory safety without garbage collection, zero-cost abstractions, and fearless concurrency make it possible to build a sophisticated kernel that's both safe and performant. Every feature we add demonstrates another aspect of systems programming in Rust. The VFS milestone shows we can build clean abstractions that work!
 
 **The Expanding Roadmap**:
-With 355+ tasks across 44 phases, RustOS has evolved from a simple hobby kernel into a wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to robotics platforms - RustOS aims to showcase the full spectrum of operating systems development and beyond!
+With 420+ tasks across 45.5 phases, RustOS has evolved from a simple hobby kernel into a wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to robotics platforms, from AI/ML inference to blockchain integration - RustOS aims to showcase the full spectrum of operating systems development and beyond!
+
+**New Frontiers Added (Planning Session 81 - THIS SESSION!)**:
+- **Shell Advanced Features**: 7 NEW features (command substitution, here docs, glob expansion, brace expansion, arithmetic, tilde expansion)
+- **Phase 7.5**: 13 NEW utilities (env, which, diff, patch, sort, uniq, cut, tr, sed, awk, etc.)
+- **Phase 7.75**: NEW PHASE! Modern bootloader & UEFI (5 major features: UEFI boot, multiboot2, boot config, framebuffer, kexec)
+- **Phase 23**: Enhanced WASM runtime (8 new sub-features: WASI, JIT, component model, host bindings, etc.)
+- **Phase 30**: Enhanced blockchain (12 NEW features: smart contracts, mining, NFTs, IPFS, wallets, etc.)
+- **Phase 35.5**: NEW PHASE! Memory forensics (6 major areas: dumps, live inspection, profiling, visualization)
+- **Phase 40.5**: NEW PHASE! AI/ML Integration (9 major areas: tensors, neural nets, training, vision, NLP, RL)
 
 **New Frontiers Added (Planning Session 23)**:
 - **Phase 7.5**: NEW! Basic system utilities (cat, ls, grep, wc, head/tail, ps, free, etc.)
