@@ -1,149 +1,185 @@
 use crate::{keyboard::KeyboardState, fs::FileDescriptorTable};
 
-/// A simple shell environment with variables.
-pub struct ShellEnvironment {
+/// A simple environment for the shell.
+pub struct EnvironmentVariables {
     pub vars: std::collections::HashMap<String, String>,
 }
 
-impl fmt::Write for ShellEnvironment {
+impl EnvironmentVariables {
+    /// Create a new empty environment with default variables set.
+    pub fn new() -> Self {
+        let mut env = Self { 
+            vars: std::collections::HashMap::new(),
+        };
+        
+        // Initialize standard shell variables
+        env.vars.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
+        env.vars.insert("HOME".to_string(), "/home/user".to_string());  
+        env.vars.insert("USER".to_string(), "user".to_string());
+        env.vars.insert("SHELL".to_string(), "/bin/shell".to_string());
+        env.vars.insert("TERM".to_string(), "xterm-256color".to_string());
+        env.vars.insert("LANG".to_string(), "en_US.UTF-8".to_string());
+
+        env
+    }
+}
+
+impl fmt::Write for EnvironmentVariables {
     fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
         // Write to stdout (fd 1)
         let mut buf = [0u8; 256];
+        
         let len = core::cmp::min(s.len(), buf.len());
         buf[..len].copy_from_slice(&s.as_bytes()[..len]);
         
-        self.fd_table
-            .write(1, &buf[0..len])
-            .map_err(|_| fmt::Error)
+        self.vars.get("STDOUT").map_or_else(|| {
+            // Use default stdout if not set
+            &FileDescriptorTable::new()
+        }).write(1, &buf[0..len])
     }
 }
 
 /// Read input from keyboard and parse into shell command tokens.
 fn read_line_from_keyboard(fd_table: &FileDescriptorTable) -> Option<String> {
-    let mut buffer = vec![0u8; 256];
+    let mut line_buffer = Vec::with_capacity(256);
     
-    // Buffer to store the characters
-    let mut line_buffer = Vec::new();
-    
-    loop { 
-        match fd_table.read(0, &mut buffer[0..1]) {
-            Ok(_) => {
-                if buffer[0] == b'\n' || buffer[0] == 0x0A {
-                    // End of input
+    loop {
+        // Wait for a key press
+        match fd_table.read(0, &[0u8; 1]) {
+            Ok(_) => { 
+                if !line_buffer.is_empty() && (fd_table.read(0, &mut [0u8; 1]).is_err()) {
                     break;
-                } else if line_buffer.len() < 256 - 1 { 
-                    let c = buffer[0];
-                    
-                    match c {
-                        b'\t' => {
-                            // Insert four spaces for tab expansion (stub)
-                            print!("    ");
-                            
-                            // Add to our internal buffer
-                            line_buffer.extend_from_slice(&b"    "[..]);
-                        },
+                }
+                
+                // Read scancode from keyboard
+                let mut buffer = [0u8; 256];
+                match fd_table.read(0, &mut buffer) {
+                    Ok(_) => { 
+                        if !buffer.is_empty() && (fd_table.read(0, &[0u8]).is_err()) {
+                            break;
+                        }
                         
-                        b'\x7f' | b'\b' => { 
-                            // Handle backspace/delete last character
-                            if !line_buffer.is_empty() {
-                                print!("\x08 \x08");  // Move cursor left, space over it
+                        // Process scancode to ASCII
+                        let ascii = process_scancode(&buffer);
+                        
+                        match ascii {
+                            Some(c) => {
+                                line_buffer.push(c); 
                                 
-                                line_buffer.pop();  
-                            }
+                                if c == b'\n' || c == 0x0A {  
+                                    break; 
+                                } else {
+                                    print!("{}", char::from(c));
+                                }
+                            },
                             
-                        },
-                        
-                        _ => { 
-                            // Append printable characters to the string buffer
-                            let is_printable = c >= b' ' && (c < 127 || c == 9); // ASCII control chars
-                        
-                            if is_printable {
-                                print!("{}", char::from(c));
-                                
-                                line_buffer.push(c);
-                            } else if c != 0x1B {  
-                                continue;
-                            }
-                        },
-                    }
+                            None => continue,
+                        }
 
-                }, 
+                    }, Err(_) => return Some(String::new()),
+                };
             },
+
+        // Handle backspace/delete
+        if !line_buffer.is_empty() && line_buffer.last().copied() == Some(0x8) {
+            print!("\x08 \x08");  // Move cursor left, space over it
             
-            Err(_) => break,
-        };
+            line_buffer.pop();
+            
+        } else { 
+            continue;
+        }
     }
 
-    // Convert buffer to string
-    match String::from_utf8(line_buffer) {
-        Ok(s) => Some(s),
-        _ => None, 
+    let input = String::from_utf8_lossy(&line_buffer).trim_end().to_string();
+
+    if !input.is_empty() {
+        Some(input)
+    } else {
+        None
     }
 }
 
-/// Parse a command line into tokens.
-fn parse_command(command: &str, env_vars: &mut ShellEnvironment) -> Result<(), &'static str> {
-    let mut parts = command.trim().split_whitespace();
+/// Process PS/2 scancode to ASCII character.
+fn process_scancode(scancodes: &[u8]) -> Option<u8> { 
+    // Simplified mapping - in real implementation this would be more complete
     
-    if let Some(first_token) = parts.next() {
-        match first_token.to_lowercase().as_str() {
-            "echo" => {
-                // Handle echo with variable expansion
-                let args: Vec<&str> = parts.collect();
-                
-                for arg in &args {
-                    print!("{} ", arg);
-                    
-                    if !arg.is_empty() && (arg.starts_with('$') || 
-                        env_vars.vars.contains_key(arg.trim_start_matches("$"))){
-                        
-                            // Expand variables like $HOME, ${PATH}
-                            
-                            let var_name = match arg.strip_prefix("$") {  
-                                Some(name) => name,
-                                
-                                None => {
-                                    if !args.is_empty() && args[0].starts_with("${"){
-                                        &arg[arg.find('{').unwrap()+1..arg.len()-2]}
-                                        
-                                    } else {
-                                        continue;
-                                    }
-                                    
-                                },
-                            };
-                            
-                            // Look up variable value
-                            let var_value = env_vars.vars.get(var_name).cloned().unwrap_or_default();
-                                
-                            print!("{}", var_value);
-                        }
+    match scancodes.get(0) {
+        Some(&scancode @ 1..=95) => {
+            let ascii = match scancode {
+                2 => b'a',   // A
+                3 => b'b',
+                4 => b'c',
+                5 => b'd',
+                6 => b'e',
+                7 => b'f',
+                8 => b'g',
+                9 => b'h',
+                10=> b'i',
+                11=> b'j',
+                12=> b'k',
+                13=> b'l', 
+                14=> b'm',
+                15=> b'n',
+                16=> b'o',
+                17=> b'p',
+                18=> b'q',
+                19=> b'r',
+                20=> b's',
+                21=> b't', 
+                22=> b'u',
+                23=> b'v',
+                24=> b'w',
+                25=> b'x',
+                26=> b'y',
+                27=> b'z',
 
-                    }
-                }
-                
-                println!();  // New line after echo
-                
-            },
+                // Numbers
+                29 => b'1', 
+                30 => b'2',
+                31 => b'3',
+                32 => b'4',
+                33 => b'5',
+                34 => b'6',
+                35=>b'7',
+                36=>b'8',
+                37=>b'9', 
+                38=>b'0',
 
-            "help" => {
-                help_command()
-            },
+                // Special keys
+                21=>b'\n',   // Enter key (new line)
+                
+                _ => return None,
+            };
             
-            "clear" | "cls" => { 
-                clear_screen()  
-            }, 
-            
-            "exit" | "quit" => exit_shell(),
-            
-            _ => return Err("Command not found"),
-        }
-    } else if command.trim().is_empty() || !command.chars().any(|c| c.is_ascii_alphanumeric()) {
+            Some(ascii)  
+        },
         
-        // Handle empty input
-        println!("No valid commands entered.");
-        Ok(())
+        _ => None,   
+    }
+}
+
+/// Parse command and execute built-in commands.
+fn parse_command(line: &str, env_vars: &mut EnvironmentVariables) -> Result<(), String> {
+    let mut parts = line.trim().split_whitespace();
     
+    if let Some(command) = parts.next() { 
+        match command.to_lowercase().as_str() {
+            "echo" => echo_command(parts.collect::<Vec<_>>(), env_vars),
+            
+            // Built-in commands
+            "help" | "?" => help_command(),
+                
+            "clear" | "cls" => clear_screen(),
+
+            "exit" | "quit" => exit_shell(),
+
+            _ => return Err(format!("Command '{}' not found. Type 'help' for available commands.", command)),
+        }
+    } else if line.trim().is_empty() {
+        // Handle empty input
+        Ok(())
+        
     }
 
     let tokens: Vec<&str> = parts.collect();
@@ -151,8 +187,7 @@ fn parse_command(command: &str, env_vars: &mut ShellEnvironment) -> Result<(), &
     match &tokens[0][..] { 
         "echo" => echo_command(tokens, env_vars),
             
-        _ => if !tokens.is_empty() {
-            // Handle built-in command
+        _ => if !tokens.is_empty() && (tokens.len() > 1 || (!tokens.is_empty()))) {
             println!("Command '{}' not found. Type 'help' for available commands.", tokens[0]);
         
         } else {
@@ -162,134 +197,110 @@ fn parse_command(command: &str, env_vars: &mut ShellEnvironment) -> Result<(), &
 
 }
 
-/// Run the shell loop.
+/// Execute the echo command with variable expansion.
+fn echo_command(tokens: Vec<&str>, env_vars: &mut EnvironmentVariables) -> Result<(), String> { 
+    if !tokens.is_empty() && (tokens.len() > 1 || (!tokens[0].is_ascii_alphanumeric()))) {
+        for arg in tokens.iter().skip(1).map(|s| s.trim()) {
+            // Handle variable expansion like $HOME or ${PATH}
+            let expanded = expand_variables(arg, env_vars);
+            
+            print!("{}", &expanded); 
+        }
+        
+    } else if !tokens.is_empty() && (tokens.len() > 0 || (!tokens[0].is_ascii_alphanumeric()))) {  
+        println!();
+    
+    }
+
+    Ok(())
+}
+
+/// Expand variables like $HOME or ${PATH} in command arguments.
+fn expand_variables(text: &str, env_vars: &EnvironmentVariables) -> String {
+    let mut result = text.to_string();
+
+    // Handle variable expansion
+    if text.starts_with('$') && !text.is_empty() { 
+        match text.strip_prefix("$") {
+            Some(name) => {
+                if name == "HOME" || name == "PATH" || env_vars.vars.contains_key(&name.to_uppercase()) {
+                    result = env_vars.vars.get(name).cloned().unwrap_or_default();
+                    
+                } else {
+                    // Try to expand as ${VAR} format
+                    let var_name = match text.strip_prefix("${") {  
+                        Some(n) => n.trim_end_matches("}"),
+                        
+                        None => return String::new(),
+                    };
+                
+                    if env_vars.vars.contains_key(var_name) {
+                        result = env_vars.vars[var_name].clone();
+                    
+                } else {
+                    // Return original string
+                    text.to_string()
+            }
+        },
+        
+    }
+
+    result 
+}
+
+/// Display help message with available commands.
+fn help_command() {  
+    let messages = [
+        "echo <text> - Print the given text",
+        "help     - Show this help message",   
+        "clear    - Clear screen (cls also works)",
+        "exit/quit- Terminate shell session"
+    ];
+    
+    for msg in &messages {
+        println!("{}", msg);
+    }
+}
+
+/// Clear terminal screen using ANSI escape codes.
+fn clear_screen() { 
+    print!("{}[2J{}", 0x1B as char, 0x1B as char); // ESC [2J
+}
+    
+/// Terminate the shell loop and exit gracefully.
+fn exit_shell() -> ! {
+    println!("\nExiting RustOS Shell...");
+    panic!("Shell terminated");
+}
+
+// Main function to run the interactive command-line interface for userspace programs.
+
 pub fn run_shell_loop(fd_table: &FileDescriptorTable) -> ! {
 
-    let mut env = ShellEnvironment { 
-        vars: std::collections::HashMap::new(),
-    };
+    let mut env = EnvironmentVariables::new();
     
-    // Initialize environment variables (default values)
-    env.vars.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
-    env.vars.insert("HOME".to_string(), "/home/user".to_string());  
-    env.vars.insert("USER".to_string(), "user".to_string());
-    env.vars.insert("SHELL".to_string(), "/bin/shell".to_string());
-    env.vars.insert("TERM".to_string(), "xterm-256color".to_string());
-    env.vars.insert("LANG".to_string(), "en_US.UTF-8".to_string());
-
-    
-    // Create file descriptor table
-    let mut fd_table = FileDescriptorTable::new();
+    // Initialize environment variables
+    println!("\nRustOS Shell (v0.1)");
+    println!("Type 'help' to see available commands.\n");
         
         loop {
-            print!("> ");
+            print!("$ ");
             
-            match read_line_from_keyboard(&fd_table) { 
-                Some(line) => {
-
-                    if line.trim().is_empty() || !line.chars().any(|c| c.is_ascii_alphanumeric()) {
-                        continue;
-                    }
-                    
-                    let tokens = parse_command(&line, &mut env);
+            if let Some(input) = read_line_from_keyboard(fd_table) { 
+                match parse_command(&input, &mut env) {
+                    Ok(()) => {}, // Command executed successfully
+                    Err(e) => println!("Error: {}", e),
+                }
                 
-                    // Handle built-in commands
-                    match &tokens[0][..] { 
-                        
-                        "echo" => echo_command(tokens, &mut env),
-                        
-                        "clear" | "cls" => clear_screen(),
-                            
-                        "exit" | "quit" => break,
+            } else {
+                 continue;  // Skip empty input lines  
+             }
 
-                        _ => {
-                            if !tokens.is_empty() && tokens.len() > 1 {
-
-                                println!("Command '{}' not found. Type 'help' for available commands.", &tokens[0]);
-                                
-                            }
-                        
-                        },
-                    }
-
-                },
-
-                
-            None => { 
-                 // Handle EOF or error
-                  break;
-             } 
         };
     }
 }
 
-// Helper functions
-
-fn echo_command(tokens: Vec<&str>, env_vars: &mut ShellEnvironment) {
-    
-    if tokens.len() > 1 {
-
-        for arg in &tokens[1..] {
-            print!("{} ", arg);
-            
-            // Expand variables like $HOME, ${PATH}
-            let var_name = match arg.strip_prefix("$") {  
-                Some(name) => name,
-                
-                None => continue,
-            };
-            
-            if env_vars.vars.contains_key(var_name) {
-
-                println!("{}", &env_vars.vars[var_name]);
-        
-        } else {
-            // Try to expand variables like ${PATH}
-            let var_value = match arg.strip_prefix("${") {  
-                Some(name) => name.trim_end_matches("}"),
-                
-                None => continue,
-            };
-            
-            if env_vars.vars.contains_key(var_value) {
-
-                println!("{}", &env_vars.vars[var_value]);
-        
-        } else {
-            print!("{} ", arg);
-        }
-    }
-
-}
-
-println!();  // New line after echo
-}
-    
-fn help_command() { 
-    let commands = [
-        "echo <text> - Print text",
-        "help     - Show this message",  
-        "clear    - Clear screen (cls also works)",
-        "exit/quit- Terminate shell"
-    ];
-        
-    for cmd in &commands {
-        println!("{}", cmd);
-    }
-}
-
-fn clear_screen() { 
-    print!("{}[2J{}", 0x1B as char, 0x1B as char); // Clear screen
-}
-    
-fn exit_shell() -> ! {
-
-    loop {}
-} 
-
-// Implementation of the shell loop that reads input and executes commands
-
-pub struct ShellEnvironment {
+// Implementation of the shell loop that reads user input and executes commands.
+pub struct EnvironmentVariables { 
     pub vars: std::collections::HashMap<String, String>,
 }
-
