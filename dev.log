@@ -1078,3 +1078,6 @@
 [2026-01-19 10:10:33] [INFO] Pushed 1 commit(s)
 [2026-01-19 10:10:33] [WARN] Task loop: 8 sessions on same task
 [2026-01-19 10:10:33] [INFO] Escalating to Claude Code
+[2026-01-19 10:14:00] [INFO] Claude exited with code 0
+[2026-01-19 10:14:00] [INFO] Claude made actual changes
+[2026-01-19 10:14:00] [INFO] Claude changes compile, auto-committing
