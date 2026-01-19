@@ -344,7 +344,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Initialize VFS and tmpfs
     let tmpfs = tmpfs::TmpFs::new();
     
-    if let Ok(_) = init_system() { 
+    if init_system().is_ok() { 
         println!("Init process (PID 1) successfully loaded");
         
         loop {
