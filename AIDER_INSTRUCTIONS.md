@@ -89,10 +89,10 @@ This is solid progress! The kernel has reached the critical milestone where it c
 
 - [x] Process Control Block (PCB) structure (src/process.rs)
 - [x] Process states enum (running, ready, blocked, zombie)
-- [ ] Fix context switching assembly (current implementation has bugs)
-  - Hint: Use proper naked functions or external ASM files
-  - Save/restore ALL registers including r8-r15, flags
-  - Handle stack switching correctly
+- [x] Fix context switching assembly (current implementation has bugs)
+  - Implemented proper inline assembly with correct register save/restore
+  - Saves ALL registers including r8-r15, rflags, segment registers
+  - Handles stack switching correctly with proper RIP save/restore
 - [ ] Integrate scheduler with timer interrupt (PIT)
   - On each timer tick, save current context and load next process
 - [ ] Kernel threads (cooperative multitasking first)
