@@ -82,7 +82,7 @@ impl Shell {
         for c in input.chars() {
             match c {
                 ' ' | '\t' => {
-                // End of argument
+                    // End of argument
                     if !current_arg.is_empty() || (args.len() == 0 && !input.trim().is_empty()) {
                         args.push(current_arg);
                         current_arg = String::new();
@@ -91,6 +91,7 @@ impl Shell {
                 _ => { 
                     current_arg.push(c); 
                 }
+            }
         }
 
         // Add the last argument
@@ -142,42 +143,36 @@ impl Shell {
         let mut result = String::new();
 
         for c in command.chars() {
-            if c == '$' && !result.is_empty() && 
-               (result.ends_with(" ") || result.len() > 1) &&
-               (!env_vars.vars.iter().any(|(k, _)| k.starts_with(&command[result.len()-2..])))) {
-
+            if c == '$' && !result.is_empty() { 
                 // Look for variable name
-                let mut var_name = String::new();
+                let var_name_start_pos = result.len();
                 
-                while !var_name.is_empty() && 
-                      env_vars.vars.iter()
-                                   .all(|(name, value)| {
-                                       if &*name == "PATH" { return true; }
-                                        false
-                                    }) &&
-                    result.len() > 1 {
-
-                        let mut found_var = None;
-                        
-                        for (k, v) in &env_vars.vars {
-                            // Check if current char is part of a variable name
-                            if k.starts_with(&result[result.len()-2..]) || 
-                               (&*k).starts_with("PATH") ||
-                               (!&*k).contains("=")
-                                && !command.contains("$")
-                                    { found_var = Some((k, v)); }
-                        }
-
-                        // Replace with value or empty string
-                        if let Some((name, val)) = found_var {
-                            result.push_str(&val);
+                while let Some(next_char) = command.get(var_name_start_pos..).and_then(|s| s.chars().next()) {
+                    match next_char {
+                        'a' ..= 'z' | 'A' ..= 'Z' | '_' => { 
+                            // Continue building variable name
+                            result.push(next_char);
                             
-                            break;
-                        } else {
-                            continue; 
-                        }
+                            if var_name_start_pos + 1 >= command.len() || !command[var_name_start_pos+1..].chars().any(|c| c.is_alphanumeric() || c == '_') {
+                                break;
+                            }
+                        },
+                        
+                        _ => { 
+                            // End of variable name
+                            let var_value = env_vars.get(&result);
+                            
+                            if let Some(value) = var_value {
+                                result.push_str(&value);  
+                                
+                                return;  // Exit early since we've expanded the full command
+                            } else {
+                                break;
+                            }
+                        },
                     }
                 }
+
             } else {
                 result.push(c);  
             }
