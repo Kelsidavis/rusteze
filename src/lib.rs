@@ -21,8 +21,11 @@ mod pci;  // New PCI enumeration module
 mod ata;  // ATA/IDE disk driver
 mod process; // Process management and scheduling
 mod syscall; // System call interface
-mod vfs;     // Virtual filesystem layer
-mod tmpfs;   // In-memory filesystem
+mod vfs;      // Virtual filesystem layer
+mod tmpfs;    // In-memory filesystem
+mod devfs;    // Device filesystem
+mod procfs;   // Process filesystem
+mod initramfs; // Initial RAM filesystem support
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -293,6 +296,84 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     }
 
     println!("VFS and tmpfs initialized successfully");
+
+    // Initialize devfs
+    println!("Initializing Device Filesystem (devfs)...");
+    let devfs = devfs::DevFs::new();
+    println!("devfs mounted with device nodes:");
+
+    // List device nodes
+    if let Ok(devices) = devfs.list() {
+        for device in devices {
+            println!("  /dev/{}", device);
+        }
+    }
+
+    // Test devfs operations
+    println!("Testing devfs operations...");
+
+    // Test /dev/null
+    if let Ok(null_dev) = devfs.lookup("null") {
+        let mut buf = [0u8; 16];
+        match null_dev.read(0, &mut buf) {
+            Ok(0) => println!("  /dev/null: read returns EOF (correct)"),
+            Ok(n) => println!("  /dev/null: unexpected read of {} bytes", n),
+            Err(e) => println!("  /dev/null: read error: {}", e),
+        }
+
+        let test_data = b"test data";
+        match null_dev.write(0, test_data) {
+            Ok(n) => println!("  /dev/null: wrote {} bytes (discarded)", n),
+            Err(e) => println!("  /dev/null: write error: {}", e),
+        }
+    }
+
+    // Test /dev/zero
+    if let Ok(zero_dev) = devfs.lookup("zero") {
+        let mut buf = [0xFFu8; 16];
+        match zero_dev.read(0, &mut buf) {
+            Ok(n) => {
+                let all_zeros = buf.iter().all(|&b| b == 0);
+                println!("  /dev/zero: read {} bytes, all zeros: {}", n, all_zeros);
+            }
+            Err(e) => println!("  /dev/zero: read error: {}", e),
+        }
+    }
+
+    println!("devfs initialized successfully");
+
+    // Initialize procfs
+    println!("Initializing Process Filesystem (procfs)...");
+    let procfs = procfs::ProcFs::new();
+    println!("procfs mounted with files:");
+
+    // List proc files
+    if let Ok(files) = procfs.list() {
+        for file in files {
+            println!("  /proc/{}", file);
+        }
+    }
+
+    // Test procfs operations
+    println!("Testing procfs operations...");
+
+    // Test /proc/meminfo
+    if let Ok(meminfo) = procfs.lookup("meminfo") {
+        let mut buf = [0u8; 256];
+        match meminfo.read(0, &mut buf) {
+            Ok(n) => {
+                if let Ok(s) = core::str::from_utf8(&buf[..n]) {
+                    println!("  /proc/meminfo contents:");
+                    for line in s.lines() {
+                        println!("    {}", line);
+                    }
+                }
+            }
+            Err(e) => println!("  /proc/meminfo: read error: {}", e),
+        }
+    }
+
+    println!("procfs initialized successfully");
     println!("RustOS ready!");
 
     loop {

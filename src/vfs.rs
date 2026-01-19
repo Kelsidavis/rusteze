@@ -103,6 +103,7 @@ pub enum VfsError {
     InvalidArgument,
     IoError,
     NotImplemented,
+    InvalidOperation,
 }
 
 impl fmt::Display for VfsError {
@@ -116,6 +117,7 @@ impl fmt::Display for VfsError {
             VfsError::InvalidArgument => write!(f, "Invalid argument"),
             VfsError::IoError => write!(f, "I/O error"),
             VfsError::NotImplemented => write!(f, "Not implemented"),
+            VfsError::InvalidOperation => write!(f, "Invalid operation"),
         }
     }
 }
