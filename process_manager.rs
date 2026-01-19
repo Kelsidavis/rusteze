@@ -1,6 +1,4 @@
-// src/process_manager.rs
-
-/// Global process manager instance with mutex protection for thread safety.
+// Global process manager instance with mutex protection for thread safety.
 pub struct ProcessManager {
     scheduler: RoundRobinScheduler,
     #[allow(dead_code)]
@@ -18,93 +16,8 @@ impl ProcessManager {
 
     /// Initialize the process manager
     pub fn init(&mut self) {
-        // Create an initial idle task with PID 0 and ready state
-        let mut pcb = ProcessControlBlock::default();
-        
-        // Set up basic context for kernel thread (stack pointer, instruction pointer)
-        unsafe {
-            // Allocate a stack frame for the new process
-            if let Some(frame_addr) = PhysFrame::allocate() {
-                // Initialize with proper values - this is simplified implementation
-                pcb.context.rsp = frame_addr.start_address().as_u64();
-                
-                // Set up initial instruction pointer to start of kernel thread function (placeholder)
-                pcb.context.rip = 0x12345678; 
-            }
-        }
-
-        // Assign PID and mark as ready
-        pcb.pid = 0;
-        pcb.state = ProcessState::Ready;
-
-        self.scheduler.add_process(pcb);
-    }
-
-    /// Spawn a new kernel thread (cooperative multitasking)
-    pub fn spawn_kernel_thread<F>(&mut self, entry_point: F) -> u32 
-    where
-        F: Fn() + 'static,
-    {
-        // Create process control block with initial state
-        let mut pcb = ProcessControlBlock::default();
-        
-        // Set up the thread's execution context (stack and instruction pointer)
-        unsafe {
-            // Allocate a stack frame for this kernel thread
-            if let Some(frame_addr) = PhysFrame::allocate() {
-                // Initialize register values - we'll use simple defaults here
-                pcb.context.rsp = frame_addr.start_address().as_u64();
-                
-                // Set up initial instruction pointer to the entry point function (placeholder)
-                pcb.context.rip = entry_point as *const () as u64;
-            }
-        }
-
-        // Assign PID and mark thread as ready for execution
-        let pid = self.next_pid;
-        
-        if matches!(pcb.state, ProcessState::Running | ProcessState::Ready)) {
-            self.scheduler.add_process(pcb);
-            
-            self.next_pid += 1; 
-            return pid;
-        }
-        
-        panic!("Failed to spawn kernel thread - invalid state");
-    }
-
-    /// Terminate a process (exit)
-    pub fn exit(&mut self, pid: u32) -> bool {
-        // Find the process by PID and mark as zombie if found
-        for i in 0..self.scheduler.processes.len() {
-            let pcb = &mut self.scheduler.processes[i];
-            
-            if pcb.pid == pid && !matches!(pcb.state, ProcessState::Zombie | ProcessState::Terminated) {
-                // Mark process state as Zombie (terminated but not yet cleaned up)
-                pcb.state = ProcessState::Zombie;
-                
-                return true;  // Successfully exited
-            }
-        }
-
-        false  // PID not found or already terminated
-    }
-
-    /// Reap zombie processes and clean up their resources (zombie reaping)
-    pub fn reap_zombies(&mut self) -> Vec<u32> {
-        let mut exited_pids = vec![];
-        
-        // Filter out zombies from the scheduler's process list
-        for i in (0..self.scheduler.processes.len()).rev() {  // Iterate backwards to avoid index issues when removing items
-            
-            if matches!(self.scheduler.processes[i].state, ProcessState::Zombie) {
-                let pid = self.scheduler.processes.remove(i).pid;
-                
-                exited_pids.push(pid);
-            }
-        }
-
-        exited_pids
+        // Set up initial idle task or other boot-time processes if needed.
+        // For now, just ensure we have a valid state.
     }
 
     /// Get count of active processes in the system.
@@ -124,7 +37,75 @@ impl ProcessManager {
         } else { 
             None
             
+        }
     }
+
+    /// Spawn a new kernel thread (cooperative multitasking).
+    pub fn spawn_kernel_thread<F>(&mut self, func: F) -> Option<u32>
+    where
+        F: FnOnce() + 'static,
+    {
+        let pid = self.next_pid;
+        self.next_pid += 1;
+
+        // Create a new process control block with initial state.
+        let mut pcb = ProcessControlBlock::new(pid, func);
+        
+        // Add to scheduler queue for cooperative multitasking
+        if !self.scheduler.processes.is_empty() {
+            // If there are already processes, add this one at the end of ready list (cooperative)
+            self.scheduler.add_process(pcb);
+            
+            Some(pid) 
+        } else {
+            // First process - start immediately.
+            self.scheduler.current_index = 0;
+            Some(pid)
+        }
+    }
+
+    /// Terminate current or specified thread/process by marking it as terminated and scheduling cleanup later if needed.
+    pub fn exit(&mut self, pid: u32) -> bool {
+        let mut found_and_removed = false;
+
+        // Find the process with matching PID
+        for (idx, pcb) in self.scheduler.processes.iter_mut().enumerate() {
+            if pcb.pid == pid && !matches!(pcb.state, ProcessState::Zombie | ProcessState::Terminated) {
+                // Mark as terminated and set state to zombie.
+                pcb.state = ProcessState::Zombie;
+                
+                found_and_removed = true;
+
+                break;  // Exit after removing one process
+            }
+        }
+
+        if !found_and_removed {
+            return false; 
+        } else {  
+            self.reap_zombies(); // Clean up any zombies now that we've exited.
+            
+            Some(pid)
+        }
+    }
+
+
+    /// Reap zombie processes (zombie reaping).
+    pub fn reap_zombies(&mut self) -> bool {
+        let mut cleaned = false;
+        
+        // Filter out terminated processes and remove them from the list
+        for i in (0..self.scheduler.processes.len()).rev() {  // Iterate backwards to avoid index issues when removing.
+            if matches!(self.scheduler.processes[i].state, ProcessState::Zombie | ProcessState::Terminated) {
+                self.scheduler.processes.remove(i);
+                
+                cleaned = true;
+            }
+        }
+
+        return cleaned; 
+    }
+
+
 }
 
-// ... rest of implementation remains unchanged
