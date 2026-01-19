@@ -104,7 +104,7 @@ impl DevInode {
     #[inline]
     pub unsafe fn get_file_ref(&self) -> &DevFile {
         // Safety: Same as above - only called from kernel context with proper synchronization
-        (*self.inner.get()).get_dev_type() 
+        (*self.inner.get()).get_dev_type();
         self.inner.get()
     }
 }
