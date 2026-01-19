@@ -88,7 +88,7 @@ impl Shell {
             "Available Built-In Commands:",
             "",
             "  echo <text>       - Print the given text",
-            "  export VAR=value     - Set an environment variable",
+            "  export VAR=value     - Set environment variable",
             "  unset VAR           - Remove an environment variable",
             "  clear               - Clear screen (Ctrl+L)",
             "  exit                - Terminate shell session",
@@ -344,7 +344,7 @@ impl Shell {
         
 
 
-        if j > start_idx { 
+        if j > start_idx && !var_name.is_empty() { 
              // We consumed a variable expansion
 
              
