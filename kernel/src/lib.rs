@@ -23,17 +23,15 @@ mod keyboard;
 mod ps2_mouse;
 mod pci;
 mod ata;
-mod process;
-mod syscall;
-mod vfs;
-mod tmpfs;
-mod devfs;
-mod procfs;
-mod initramfs;
+mod process; // Process management and scheduling
+mod syscall; // System call interface
+mod vfs;      // Virtual filesystem layer
+mod tmpfs;    // In-memory filesystem
+mod devfs;    // Device filesystem
+mod procfs;   // Process filesystem
+mod initramfs; // Initial RAM filesystem support
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB};
-
-entry_point!(kernel_main);
 
 // ELF header structure
 #[repr(C)]
@@ -159,6 +157,8 @@ pub fn load_elf_binary(
     }
 
     // Create the init process (PID 1)
+    const USER_STACK_SIZE: usize = 4096 * 8; // 32KB for user stack
+    
     let mut pcb = crate::process::ProcessControlBlock::new(
         1,
         phys_frame.clone(),
@@ -166,8 +166,6 @@ pub fn load_elf_binary(
         true
     );
 
-    const USER_STACK_SIZE: usize = 4096 * 8; // 32KB for user stack
-    
     let user_stack_frames =
         crate::physical_memory::allocate_frames(USER_STACK_SIZE / 4096)
             .map_err(|_| ElfError::MemoryAllocationFailed)?;
@@ -199,7 +197,8 @@ pub fn init_system() -> Result<(), ElfError> {
     Ok(())
 }
 
-// Kernel entry point - called after bootloader setup is complete.
+entry_point!(kernel_main);
+
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Initialize GDT first (required for IDT)
     unsafe {
@@ -297,11 +296,11 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
             match cls {
                 0x01 => println!("    Storage: {} device(s)", count),
                 0x02 => println!("    Network: {} device(s)", count),
-                0x03 => println!("    Display: {} device(s)", count),
-                0x04 => println!("    Multimedia: {} device(s)", count),
-                0x05 => println!("    Memory: {} device(s)", count),
-                0x06 => println!("    Bridge: {} device(s)", count),
-                0x07 => println!("    Communication: {} device(s)", count),
+                0x03 => println!("    Display: {} device(s)", count,
+                0x04 => println!("    Multimedia: {} device(s)", count,
+                0x05 => println!("    Memory: {} device(s)", count,
+                0x06 => println!("    Bridge: {} device(s)", count,
+                0x07 => println!("    Communication: {} device(s)", count,
                 _ => println!("    Other (0x{:02X}): {} device(s)", cls, count)
             }
         }
