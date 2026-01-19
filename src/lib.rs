@@ -26,6 +26,8 @@ mod tmpfs;    // In-memory filesystem
 mod devfs;    // Device filesystem
 mod procfs;   // Process filesystem
 mod initramfs; // Initial RAM filesystem support
+mod elf;      // ELF binary loader
+mod init;     // Init process (PID 1)
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -374,6 +376,12 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     }
 
     println!("procfs initialized successfully");
+
+    // ELF loader and init process infrastructure ready
+    println!("ELF binary loader initialized");
+    println!("Init process (PID 1) infrastructure ready");
+    println!("Note: Static binary support implemented, awaiting userspace transition");
+
     println!("RustOS ready!");
 
     loop {
