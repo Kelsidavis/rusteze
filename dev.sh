@@ -27,7 +27,7 @@ STAT_REVERTS=0
 STAT_COMMITS=0
 
 # Configuration
-PLANNING_INTERVAL=10  # Run planning session every N sessions
+PLANNING_INTERVAL=20  # Run planning session every N sessions
 
 # Log function - writes to file and optionally to stdout
 log() {
@@ -521,57 +521,56 @@ Please:
 
 Work autonomously until the task is resolved.
 "
-            CLAUDE_EXIT=$?
-            log "INFO" "Claude exited with code $CLAUDE_EXIT"
+        CLAUDE_EXIT=$?
+        log "INFO" "Claude exited with code $CLAUDE_EXIT"
 
-            # Verify Claude actually made changes (anti-hallucination check)
-            FILES_AFTER=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
-            INSTRUCTIONS_AFTER=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
-            DIRTY_AFTER=$(git status --porcelain 2>/dev/null | wc -l)
-            COMMITS_AFTER_CLAUDE=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+        # Verify Claude actually made changes (anti-hallucination check)
+        FILES_AFTER=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
+        INSTRUCTIONS_AFTER=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+        DIRTY_AFTER=$(git status --porcelain 2>/dev/null | wc -l)
+        COMMITS_AFTER_CLAUDE=$(git rev-list --count HEAD 2>/dev/null || echo "0")
 
-            if [ "$FILES_BEFORE" = "$FILES_AFTER" ] && [ "$INSTRUCTIONS_BEFORE" = "$INSTRUCTIONS_AFTER" ] && [ "$DIRTY_AFTER" -eq 0 ] && [ "$COMMITS_AFTER_CLAUDE" -eq "$COMMITS_AFTER" ]; then
-                echo ""
-                echo "⚠ Claude claimed to work but made NO actual changes!"
-                echo "  Files unchanged, no commits, no dirty files."
-                echo "  This was likely a hallucination. Continuing..."
-                log "WARN" "Claude hallucination - no actual changes made"
-                STAT_CLAUDE_HALLUCINATIONS=$((STAT_CLAUDE_HALLUCINATIONS + 1))
-                # Don't reset stuck count - let it try again or escalate
-            else
-                echo ""
-                echo "✓ Claude made actual changes."
-                log "INFO" "Claude made actual changes"
-                # Check if changes compile
-                if [ "$DIRTY_AFTER" -gt 0 ]; then
-                    echo "Testing uncommitted changes..."
+        if [ "$FILES_BEFORE" = "$FILES_AFTER" ] && [ "$INSTRUCTIONS_BEFORE" = "$INSTRUCTIONS_AFTER" ] && [ "$DIRTY_AFTER" -eq 0 ] && [ "$COMMITS_AFTER_CLAUDE" -eq "$COMMITS_AFTER" ]; then
+            echo ""
+            echo "⚠ Claude claimed to work but made NO actual changes!"
+            echo "  Files unchanged, no commits, no dirty files."
+            echo "  This was likely a hallucination. Continuing..."
+            log "WARN" "Claude hallucination - no actual changes made"
+            STAT_CLAUDE_HALLUCINATIONS=$((STAT_CLAUDE_HALLUCINATIONS + 1))
+            # Don't reset stuck count - let it try again or escalate
+        else
+            echo ""
+            echo "✓ Claude made actual changes."
+            log "INFO" "Claude made actual changes"
+            # Check if changes compile
+            if [ "$DIRTY_AFTER" -gt 0 ]; then
+                echo "Testing uncommitted changes..."
+                if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
+                    echo "✓ Build passes! Auto-committing Claude's work..."
+                    log "INFO" "Claude changes compile, auto-committing"
+                    git add -A
+                    git commit -m "Auto-commit: Claude Code changes that compile"
+                    # Verify commit before pushing
                     if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
-                        echo "✓ Build passes! Auto-committing Claude's work..."
-                        log "INFO" "Claude changes compile, auto-committing"
-                        git add -A
-                        git commit -m "Auto-commit: Claude Code changes that compile"
-                        # Verify commit before pushing
-                        if RUSTFLAGS="-D warnings" cargo build --release 2>&1; then
-                            git push origin master
-                            STAT_COMMITS=$((STAT_COMMITS + 1))
-                        else
-                            echo "✗ Committed code fails - reverting"
-                            log "ERROR" "Claude commit fails build, reverting"
-                            STAT_REVERTS=$((STAT_REVERTS + 1))
-                            git reset --hard HEAD~1
-                        fi
+                        git push origin master
+                        STAT_COMMITS=$((STAT_COMMITS + 1))
                     else
-                        echo "✗ Build FAILS - reverting Claude's broken code..."
-                        log "WARN" "Claude changes don't compile, reverting"
+                        echo "✗ Committed code fails - reverting"
+                        log "ERROR" "Claude commit fails build, reverting"
                         STAT_REVERTS=$((STAT_REVERTS + 1))
-                        git checkout -- .
-                        git clean -fd 2>/dev/null
+                        git reset --hard HEAD~1
                     fi
+                else
+                    echo "✗ Build FAILS - reverting Claude's broken code..."
+                    log "WARN" "Claude changes don't compile, reverting"
+                    STAT_REVERTS=$((STAT_REVERTS + 1))
+                    git checkout -- .
+                    git clean -fd 2>/dev/null
                 fi
-                STUCK_COUNT=0
-                # Reset same-task counter if Claude intervened successfully
-                SAME_TASK_COUNT=0
             fi
+            STUCK_COUNT=0
+            # Reset same-task counter if Claude intervened successfully
+            SAME_TASK_COUNT=0
         fi
     fi
 
@@ -643,6 +642,19 @@ Please fix any issues and ensure build passes. Be brief.
         RECENT_COMMITS=$(git log --oneline -10 2>/dev/null)
         CODE_STRUCTURE=$(find src -name "*.rs" -type f 2>/dev/null | head -20)
 
+        # Check for stuck loop
+        STUCK_WARNING=""
+        if [ $SAME_TASK_COUNT -ge 5 ]; then
+            STUCK_WARNING="⚠ STUCK LOOP DETECTED: The local AI has been working on the same task for $SAME_TASK_COUNT sessions without completing it:
+Task: $NEXT_TASK_ONELINE
+
+CRITICAL: You MUST resolve this stuck loop. Either:
+1. Mark the task [x] as complete if it's already done (check the code!)
+2. Rewrite the task to be clearer and more specific
+3. Mark [x] and skip it if it's impossible/unclear
+4. Break it into smaller, achievable subtasks"
+        fi
+
         # Snapshot before planning
         INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
@@ -653,6 +665,9 @@ SESSION STATS:
 - Sessions completed: $SESSION
 - Tasks done: $DONE
 - Tasks remaining: $TODO
+- Same task attempts: $SAME_TASK_COUNT
+
+$STUCK_WARNING
 
 RECENT PROGRESS (last 10 commits):
 $RECENT_COMMITS
@@ -668,21 +683,24 @@ $CODE_STRUCTURE
 
 YOUR MISSION - EVOLVE THE VISION:
 
-1. CELEBRATE PROGRESS: Review what's been accomplished and how the OS is taking shape
+1. RESOLVE STUCK LOOPS (if any): If a task is stuck, investigate the code and either mark it done, clarify it, or skip it
 
-2. EXPAND THE ROADMAP: The roadmap should always be growing. Add new features that would make this a more capable, interesting OS:
+2. CELEBRATE PROGRESS: Review what's been accomplished and how the OS is taking shape
+
+3. EXPAND THE ROADMAP: The roadmap should always be growing. Add new features that would make this a more capable, interesting OS:
    - What's the next logical capability after current tasks?
    - What would make this OS unique or impressive?
    - Consider: filesystems, networking, graphics, shell, userspace programs
    - Think about what features would be fun to implement and demo
 
-3. REFINE PRIORITIES: Reorder tasks so the most impactful/unblocking work comes first
+4. REFINE PRIORITIES: Reorder tasks so the most impactful/unblocking work comes first
 
-4. ADD DETAIL: For complex upcoming tasks, add implementation hints or break them into subtasks
+5. ADD DETAIL: For complex upcoming tasks, add implementation hints or break them into subtasks
 
-5. MAINTAIN VISION: Keep a 'Vision' or 'Goals' section at the top describing what this OS is becoming
+6. MAINTAIN VISION: Keep a 'Vision' or 'Goals' section at the top describing what this OS is becoming
 
 UPDATE AIDER_INSTRUCTIONS.md:
+- FIRST: Resolve any stuck loops (mark done, clarify, or skip)
 - Add 3-5 NEW tasks beyond what's currently listed (always be expanding)
 - Reorder if needed (dependencies first, then high-impact features)
 - Add brief implementation hints for tricky tasks
@@ -690,6 +708,7 @@ UPDATE AIDER_INSTRUCTIONS.md:
 - Group related tasks under phase headings
 
 PHILOSOPHY:
+- Stuck tasks are roadblocks - resolve them immediately
 - This OS should keep getting more capable and interesting
 - Each planning session should leave the roadmap MORE ambitious, not less
 - Balance achievable near-term tasks with exciting longer-term goals
@@ -715,6 +734,8 @@ After updating, commit with message: 'docs: planning session - expand roadmap'
                 STAT_COMMITS=$((STAT_COMMITS + 1))
                 log "INFO" "Committed roadmap expansion"
             fi
+            # Reset stuck counter since planning session likely resolved it
+            SAME_TASK_COUNT=0
         else
             echo "Roadmap unchanged (planning found no updates needed)"
             log "INFO" "Planning session made no roadmap changes"
