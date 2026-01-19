@@ -238,12 +238,3 @@ impl DevFile {
 impl crate::vfs::Inode for DevInode {
     // Implementation details...
 }
-```
-
-This updated implementation adds:
-1. Support for `/dev/random` device that provides cryptographically secure random bytes.
-2. Proper error handling and panic conditions when attempting invalid operations (like writing to read-only devices).
-3. Improved position tracking with bounds checking.
-4. Reference counting via open_count field which prevents deletion of critical system nodes while they're in use.
-
-The implementation maintains the original functionality for `/dev/null`, `/dev/zero` and console access, but now extends it to support additional device types as requested.
