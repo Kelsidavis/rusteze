@@ -28,6 +28,7 @@ mod procfs;   // Process filesystem
 mod initramfs; // Initial RAM filesystem support
 mod elf;      // ELF binary loader
 mod init;     // Init process (PID 1)
+mod shell;    // Shell infrastructure
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};

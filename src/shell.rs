@@ -1,306 +1,220 @@
-use crate::{keyboard::KeyboardState, fs::FileDescriptorTable};
+/// Simple shell infrastructure for RustOS
+/// This module provides basic shell functionality with command parsing and execution
 
-/// A simple environment for the shell.
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use alloc::collections::BTreeMap;
+
+/// Environment variables for the shell
 pub struct EnvironmentVariables {
-    pub vars: std::collections::HashMap<String, String>,
+    vars: BTreeMap<String, String>,
 }
 
 impl EnvironmentVariables {
-    /// Create a new empty environment with default variables set.
+    /// Create a new environment with default variables
     pub fn new() -> Self {
-        let mut env = Self { 
-            vars: std::collections::HashMap::new(),
-        };
-        
+        let mut vars = BTreeMap::new();
+
         // Initialize standard shell variables
-        env.vars.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
-        env.vars.insert("HOME".to_string(), "/home/user".to_string());  
-        env.vars.insert("USER".to_string(), "user".to_string());
-        env.vars.insert("SHELL".to_string(), "/bin/shell".to_string());
-        env.vars.insert("TERM".to_string(), "xterm-256color".to_string());
-        env.vars.insert("LANG".to_string(), "en_US.UTF-8".to_string());
+        vars.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
+        vars.insert("HOME".to_string(), "/home/user".to_string());
+        vars.insert("USER".to_string(), "user".to_string());
+        vars.insert("SHELL".to_string(), "/bin/shell".to_string());
+        vars.insert("TERM".to_string(), "xterm-256color".to_string());
+        vars.insert("LANG".to_string(), "en_US.UTF-8".to_string());
 
-        env
+        Self { vars }
+    }
+
+    /// Get a variable value
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.vars.get(key)
+    }
+
+    /// Set a variable value
+    pub fn set(&mut self, key: String, value: String) {
+        self.vars.insert(key, value);
+    }
+
+    /// Remove a variable
+    pub fn unset(&mut self, key: &str) {
+        self.vars.remove(key);
     }
 }
 
-impl fmt::Write for EnvironmentVariables {
-    fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
-        // Write to stdout (fd 1)
-        let mut buf = [0u8; 256];
-        
-        let len = core::cmp::min(s.len(), buf.len());
-        buf[..len].copy_from_slice(&s.as_bytes()[..len]);
-        
-        self.vars.get("STDOUT").map_or_else(|| {
-            // Use default stdout if not set
-            &FileDescriptorTable::new()
-        }).write(1, &buf[0..len])
-    }
+/// Shell state structure
+pub struct Shell {
+    env: EnvironmentVariables,
 }
 
-/// Read input from keyboard and parse into shell command tokens.
-fn read_line_from_keyboard(fd_table: &FileDescriptorTable) -> Option<String> {
-    let mut line_buffer = Vec::with_capacity(256);
-    
-    loop {
-        // Wait for a key press
-        match fd_table.read(0, &[0u8; 1]) {
-            Ok(_) => { 
-                if !line_buffer.is_empty() && (fd_table.read(0, &mut [0u8; 1]).is_err()) {
-                    break;
-                }
-                
-                // Read scancode from keyboard
-                let mut buffer = [0u8; 256];
-                match fd_table.read(0, &mut buffer) {
-                    Ok(_) => { 
-                        if !buffer.is_empty() && (fd_table.read(0, &[0u8]).is_err()) {
-                            break;
-                        }
-                        
-                        // Process scancode to ASCII
-                        let ascii = process_scancode(&buffer);
-                        
-                        match ascii {
-                            Some(c) => {
-                                line_buffer.push(c); 
-                                
-                                if c == b'\n' || c == 0x0A {  
-                                    break; 
-                                } else {
-                                    print!("{}", char::from(c));
-                                }
-                            },
-                            
-                            None => continue,
-                        }
-
-                    }, Err(_) => return Some(String::new()),
-                };
-            },
-
-        // Handle backspace/delete
-        if !line_buffer.is_empty() && line_buffer.last().copied() == Some(0x8) {
-            print!("\x08 \x08");  // Move cursor left, space over it
-            
-            line_buffer.pop();
-            
-        } else { 
-            continue;
+impl Shell {
+    /// Create a new shell instance
+    pub fn new() -> Self {
+        Self {
+            env: EnvironmentVariables::new(),
         }
     }
 
-    let input = String::from_utf8_lossy(&line_buffer).trim_end().to_string();
+    /// Parse and execute a command line
+    pub fn execute_line(&mut self, line: &str) -> Result<(), &'static str> {
+        let line = line.trim();
 
-    if !input.is_empty() {
-        Some(input)
-    } else {
-        None
-    }
-}
-
-/// Process PS/2 scancode to ASCII character.
-fn process_scancode(scancodes: &[u8]) -> Option<u8> { 
-    // Simplified mapping - in real implementation this would be more complete
-    
-    match scancodes.get(0) {
-        Some(&scancode @ 1..=95) => {
-            let ascii = match scancode {
-                2 => b'a',   // A
-                3 => b'b',
-                4 => b'c',
-                5 => b'd',
-                6 => b'e',
-                7 => b'f',
-                8 => b'g',
-                9 => b'h',
-                10=> b'i',
-                11=> b'j',
-                12=> b'k',
-                13=> b'l', 
-                14=> b'm',
-                15=> b'n',
-                16=> b'o',
-                17=> b'p',
-                18=> b'q',
-                19=> b'r',
-                20=> b's',
-                21=> b't', 
-                22=> b'u',
-                23=> b'v',
-                24=> b'w',
-                25=> b'x',
-                26=> b'y',
-                27=> b'z',
-
-                // Numbers
-                29 => b'1', 
-                30 => b'2',
-                31 => b'3',
-                32 => b'4',
-                33 => b'5',
-                34 => b'6',
-                35=>b'7',
-                36=>b'8',
-                37=>b'9', 
-                38=>b'0',
-
-                // Special keys
-                21=>b'\n',   // Enter key (new line)
-                
-                _ => return None,
-            };
-            
-            Some(ascii)  
-        },
-        
-        _ => None,   
-    }
-}
-
-/// Parse command and execute built-in commands.
-fn parse_command(line: &str, env_vars: &mut EnvironmentVariables) -> Result<(), String> {
-    let mut parts = line.trim().split_whitespace();
-    
-    if let Some(command) = parts.next() { 
-        match command.to_lowercase().as_str() {
-            "echo" => echo_command(parts.collect::<Vec<_>>(), env_vars),
-            
-            // Built-in commands
-            "help" | "?" => help_command(),
-                
-            "clear" | "cls" => clear_screen(),
-
-            "exit" | "quit" => exit_shell(),
-
-            _ => return Err(format!("Command '{}' not found. Type 'help' for available commands.", command)),
+        // Skip empty lines and comments
+        if line.is_empty() || line.starts_with('#') {
+            return Ok(());
         }
-    } else if line.trim().is_empty() {
-        // Handle empty input
-        Ok(())
-        
-    }
 
-    let tokens: Vec<&str> = parts.collect();
-    
-    match &tokens[0][..] { 
-        "echo" => echo_command(tokens, env_vars),
-            
-        _ => if !tokens.is_empty() && (tokens.len() > 1 || (!tokens.is_empty()))) {
-            println!("Command '{}' not found. Type 'help' for available commands.", tokens[0]);
-        
+        // Parse command and arguments
+        let mut parts = line.split_whitespace();
+
+        if let Some(cmd) = parts.next() {
+            let args: Vec<&str> = parts.collect();
+            self.execute_command(cmd, &args)
         } else {
             Ok(())
         }
     }
 
-}
-
-/// Execute the echo command with variable expansion.
-fn echo_command(tokens: Vec<&str>, env_vars: &mut EnvironmentVariables) -> Result<(), String> { 
-    if !tokens.is_empty() && (tokens.len() > 1 || (!tokens[0].is_ascii_alphanumeric()))) {
-        for arg in tokens.iter().skip(1).map(|s| s.trim()) {
-            // Handle variable expansion like $HOME or ${PATH}
-            let expanded = expand_variables(arg, env_vars);
-            
-            print!("{}", &expanded); 
-        }
-        
-    } else if !tokens.is_empty() && (tokens.len() > 0 || (!tokens[0].is_ascii_alphanumeric()))) {  
-        println!();
-    
-    }
-
-    Ok(())
-}
-
-/// Expand variables like $HOME or ${PATH} in command arguments.
-fn expand_variables(text: &str, env_vars: &EnvironmentVariables) -> String {
-    let mut result = text.to_string();
-
-    // Handle variable expansion
-    if text.starts_with('$') && !text.is_empty() { 
-        match text.strip_prefix("$") {
-            Some(name) => {
-                if name == "HOME" || name == "PATH" || env_vars.vars.contains_key(&name.to_uppercase()) {
-                    result = env_vars.vars.get(name).cloned().unwrap_or_default();
-                    
-                } else {
-                    // Try to expand as ${VAR} format
-                    let var_name = match text.strip_prefix("${") {  
-                        Some(n) => n.trim_end_matches("}"),
-                        
-                        None => return String::new(),
-                    };
-                
-                    if env_vars.vars.contains_key(var_name) {
-                        result = env_vars.vars[var_name].clone();
-                    
-                } else {
-                    // Return original string
-                    text.to_string()
+    /// Execute a single command with arguments
+    fn execute_command(&mut self, cmd: &str, args: &[&str]) -> Result<(), &'static str> {
+        match cmd {
+            "echo" => self.cmd_echo(args),
+            "export" => self.cmd_export(args),
+            "unset" => self.cmd_unset(args),
+            "clear" | "cls" => self.cmd_clear(),
+            "exit" => self.cmd_exit(),
+            "help" => self.cmd_help(),
+            _ => {
+                crate::println!("Command not found: {}", cmd);
+                Err("command not found")
             }
-        },
-        
+        }
     }
 
-    result 
-}
+    /// Echo command - print arguments
+    fn cmd_echo(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                crate::print!(" ");
+            }
 
-/// Display help message with available commands.
-fn help_command() {  
-    let messages = [
-        "echo <text> - Print the given text",
-        "help     - Show this help message",   
-        "clear    - Clear screen (cls also works)",
-        "exit/quit- Terminate shell session"
-    ];
-    
-    for msg in &messages {
-        println!("{}", msg);
-    }
-}
-
-/// Clear terminal screen using ANSI escape codes.
-fn clear_screen() { 
-    print!("{}[2J{}", 0x1B as char, 0x1B as char); // ESC [2J
-}
-    
-/// Terminate the shell loop and exit gracefully.
-fn exit_shell() -> ! {
-    println!("\nExiting RustOS Shell...");
-    panic!("Shell terminated");
-}
-
-// Main function to run the interactive command-line interface for userspace programs.
-
-pub fn run_shell_loop(fd_table: &FileDescriptorTable) -> ! {
-
-    let mut env = EnvironmentVariables::new();
-    
-    // Initialize environment variables
-    println!("\nRustOS Shell (v0.1)");
-    println!("Type 'help' to see available commands.\n");
-        
-        loop {
-            print!("$ ");
-            
-            if let Some(input) = read_line_from_keyboard(fd_table) { 
-                match parse_command(&input, &mut env) {
-                    Ok(()) => {}, // Command executed successfully
-                    Err(e) => println!("Error: {}", e),
+            // Simple variable expansion for $VAR
+            if let Some(var_name) = arg.strip_prefix('$') {
+                if let Some(value) = self.env.get(var_name) {
+                    crate::print!("{}", value);
+                } else {
+                    crate::print!("");
                 }
-                
             } else {
-                 continue;  // Skip empty input lines  
-             }
+                crate::print!("{}", arg);
+            }
+        }
+        crate::println!();
+        Ok(())
+    }
 
-        };
+    /// Export command - set environment variable
+    fn cmd_export(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            // List all variables
+            for (key, value) in &self.env.vars {
+                crate::println!("{}={}", key, value);
+            }
+        } else {
+            for arg in args {
+                if let Some((key, value)) = arg.split_once('=') {
+                    self.env.set(key.to_string(), value.to_string());
+                } else {
+                    crate::println!("export: invalid format. Use: export VAR=value");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Unset command - remove environment variable
+    fn cmd_unset(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        for arg in args {
+            self.env.unset(arg);
+        }
+        Ok(())
+    }
+
+    /// Clear screen command
+    fn cmd_clear(&mut self) -> Result<(), &'static str> {
+        crate::vga::WRITER.lock().clear_screen();
+        Ok(())
+    }
+
+    /// Exit shell (for now just print a message)
+    fn cmd_exit(&mut self) -> Result<(), &'static str> {
+        crate::println!("Exit command not fully implemented (kernel continues running)");
+        Ok(())
+    }
+
+    /// Help command - show available commands
+    fn cmd_help(&mut self) -> Result<(), &'static str> {
+        crate::println!("RustOS Shell - Available Commands:");
+        crate::println!("  echo [args...]   - Print arguments to screen");
+        crate::println!("  export VAR=val   - Set environment variable");
+        crate::println!("  unset VAR        - Remove environment variable");
+        crate::println!("  clear/cls        - Clear the screen");
+        crate::println!("  help             - Show this help message");
+        crate::println!("  exit             - Exit the shell");
+        Ok(())
     }
 }
 
-// Implementation of the shell loop that reads user input and executes commands.
-pub struct EnvironmentVariables { 
-    pub vars: std::collections::HashMap<String, String>,
+// NOTE: Keyboard input integration is NOT implemented yet.
+// The read_line_from_keyboard function below is a stub that needs proper implementation.
+// It should:
+// 1. Read scancodes from the PS/2 keyboard driver
+// 2. Convert scancodes to ASCII characters
+// 3. Handle special keys (backspace, enter, etc.)
+// 4. Return a complete line when Enter is pressed
+
+/// Read a line from the keyboard (STUB - NOT IMPLEMENTED)
+///
+/// This is a placeholder that needs to be connected to the keyboard driver.
+/// Current status: Returns None because keyboard input is not integrated.
+#[allow(dead_code)]
+pub fn read_line_from_keyboard() -> Option<String> {
+    // TODO: Implement keyboard input integration
+    // Need to:
+    // 1. Read from keyboard buffer (possibly via syscall or direct driver access)
+    // 2. Convert PS/2 scancodes to ASCII
+    // 3. Handle line editing (backspace, cursor movement, etc.)
+    // 4. Return completed line on Enter key
+
+    None
+}
+
+/// Run the shell loop (STUB - NOT FULLY IMPLEMENTED)
+///
+/// This function would normally run an interactive shell loop, but keyboard
+/// input is not yet integrated with the shell infrastructure.
+#[allow(dead_code)]
+pub fn run_shell_loop() -> ! {
+    let mut shell = Shell::new();
+
+    crate::println!("RustOS Shell v0.1");
+    crate::println!("Type 'help' for available commands");
+    crate::println!();
+    crate::println!("WARNING: Keyboard input not yet integrated!");
+    crate::println!("Shell infrastructure is ready but needs keyboard driver connection.");
+
+    // Demonstrate that the shell works by executing some test commands
+    let _ = shell.execute_line("help");
+    crate::println!();
+    let _ = shell.execute_line("echo Shell infrastructure is working!");
+    let _ = shell.execute_line("export TEST=hello");
+    let _ = shell.execute_line("echo Test variable: $TEST");
+
+    crate::println!();
+    crate::println!("Shell loop would start here with keyboard input...");
+
+    // For now, just loop forever
+    loop {
+        core::hint::spin_loop();
+    }
 }
