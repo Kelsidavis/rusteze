@@ -296,11 +296,11 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
             match cls {
                 0x01 => println!("    Storage: {} device(s)", count),
                 0x02 => println!("    Network: {} device(s)", count),
-                0x03 => println!("    Display: {} device(s)", count,
-                0x04 => println!("    Multimedia: {} device(s)", count,
-                0x05 => println!("    Memory: {} device(s)", count,
-                0x06 => println!("    Bridge: {} device(s)", count,
-                0x07 => println!("    Communication: {} device(s)", count,
+                0x03 => println!("    Display: {} device(s)", count),
+                0x04 => println!("    Multimedia: {} device(s)", count),
+                0x05 => println!("    Memory: {} device(s)", count),
+                0x06 => println!("    Bridge: {} device(s)", count),
+                0x07 => println!("    Communication: {} device(s)", count),
                 _ => println!("    Other (0x{:02X}): {} device(s)", cls, count)
             }
         }
@@ -394,3 +394,4 @@ fn panic(info: &PanicInfo) -> ! {
         core::hint::spin_loop();
     }
 }
+```
