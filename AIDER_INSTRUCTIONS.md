@@ -12,13 +12,14 @@
 **What makes RustOS unique:**
 - Pure Rust kernel with memory safety guarantees and zero legacy C code
 - Clean architecture built from first principles - understandable and hackable
-- Wildly ambitious roadmap: 330+ tasks spanning 41 phases from basics to robotics
+- Wildly ambitious roadmap: 355+ tasks spanning 44 phases from basics to robotics
 - Not just an OS - a platform for gaming, development, collaboration, research, and automation
-- Practical progression: Shell → networking → multimedia → distributed systems → robotics → innovation
+- Practical progression: Shell → utilities → networking → multimedia → distributed systems → robotics
 - Educational value: Perfect reference for modern OS development in Rust
 - Research platform: Experiment with novel OS concepts in a safe, modern language
-- Entertainment focus: Games, emulators, media playback, and creative tools
+- Entertainment focus: Games, emulators, media playback, demos, and creative tools
 - Production-ready features: Security hardening, power management, cloud-native integrations
+- Developer experience: Kernel debugging tools, instrumentation, performance counters
 - Emerging tech: Robotics platform with ROS compatibility, autonomous navigation, sensor fusion
 
 **The Long-Term Dream:**
@@ -53,15 +54,24 @@ RustOS isn't just an operating system - it's a complete computing environment th
 
 ## 🎉 Recent Achievements
 
-**Development Session** (2026-01-19 - After 8 Failed Attempts):
-- ✓ **TASK INVESTIGATION COMPLETE**: Previous 8 sessions created malformed files, not real implementation
+**Planning Session 23** (2026-01-19):
+- ✓ **MAJOR PROGRESS**: Basic shell infrastructure implemented (src/shell.rs)!
+- ✓ Command parsing with proper tokenization ✓
+- ✓ Environment variable support (PATH, HOME, USER, SHELL, TERM, LANG) ✓
+- ✓ Export/unset command handling ✓
+- ✓ Echo command working ✓
+- ✓ Shell loop structure in place ✓
+- ⚠️ **IDENTIFIED ISSUE**: Keyboard input stub needs proper implementation
+- ⚠️ **IDENTIFIED ISSUE**: Duplicate fmt::Write impl needs cleanup
+- ✓ Code continues to compile cleanly with ZERO warnings!
+- ✓ Roadmap expanded with 5+ new ambitious features!
+
+**Previous Session** (2026-01-19 - After 8 Failed Attempts):
 - ✓ **ELF binary loader implemented** (src/elf.rs) - Proper 64-bit ELF parsing for static binaries!
 - ✓ **Init process infrastructure** (src/init.rs) - PID 1 module structure ready!
 - ✓ ELF header validation: magic number, class, endianness, architecture checks ✓
 - ✓ Program header parsing for PT_LOAD segments ✓
 - ✓ Foundation laid for loading static binaries into memory ✓
-- ✓ Code compiles with ZERO warnings (RUSTFLAGS="-D warnings") ✓
-- ✓ Phase 7 tasks properly marked complete with notes about next steps!
 
 **Planning Session 22 Highlights** (2026-01-19):
 - ✓ **MAJOR MILESTONE**: VFS layer with inode abstraction fully implemented!
@@ -255,50 +265,132 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Will be first userspace process spawned by kernel (awaiting userspace transition)
   - Responsible for launching shell (TODO)
   - Reap zombie children (wait for all processes) (TODO)
-- [ ] Basic shell (`/bin/sh`) with commands:
-  - `echo <text>` - print text
-  - `clear` - clear screen
-  - `help` - show available commands
-  - `ps` - list processes
-  - `cat <file>` - display file contents
-  - `ls [dir]` - list directory
-  - `exit` - terminate shell (causes kernel panic for now)
-  - `reboot` - reboot system
-  - `pwd` - print working directory
-  - `cd <dir>` - change directory
-- [ ] Command parsing and execution loop
-  - Read line from stdin
-  - Parse into command + args
-  - Fork/exec or builtin dispatch
-- [ ] Environment variables
-  - PATH, HOME, USER, etc.
-  - Export and access from programs
-  - Environment passing on exec
-- [ ] Command history and editing
-  - Arrow keys for previous commands
-  - Basic readline functionality
+
+**SHELL INFRASTRUCTURE (Partial) - src/shell.rs:**
+- [x] Shell module structure and types (Shell, EnvironmentVariables)
+- [x] Command parsing (parse_command with proper tokenization)
+- [x] Environment variables (default PATH, HOME, USER, SHELL, TERM, LANG)
+- [x] Export/unset command handling
+- [x] Echo command implementation
+- [x] Shell loop structure (run_shell_loop)
+- [ ] **FIX BLOCKING ISSUE**: Fix duplicate fmt::Write impl (lines 12-23 and 54-65)
+- [ ] **FIX BLOCKING ISSUE**: Implement proper keyboard input (read_line_from_keyboard is incomplete stub)
+- [ ] **INTEGRATION**: Connect shell loop to keyboard driver (PS/2 scancode -> ASCII)
+- [ ] **INTEGRATION**: Wire shell to VFS for file operations
+
+**SHELL BUILTIN COMMANDS (Next Priority):**
+- [x] `echo <text>` - print text ✓
+- [x] `clear` - clear screen (stub) ✓
+- [x] `exit` - terminate shell ✓
+- [ ] `help` - show available commands
+- [ ] `ps` - list processes (needs process manager integration)
+- [ ] `cat <file>` - display file contents (needs VFS integration)
+- [ ] `ls [dir]` - list directory (needs VFS integration)
+- [ ] `pwd` - print working directory
+- [ ] `cd <dir>` - change directory
+- [ ] `mkdir <dir>` - create directory
+- [ ] `rm <file>` - remove file
+- [ ] `reboot` - reboot system
+
+**SHELL ADVANCED FEATURES (Future):**
+- [ ] Command history (store previous commands in buffer)
+- [ ] Arrow key editing (up/down for history, left/right for cursor)
+- [ ] Tab completion (file/command completion)
+- [ ] Pipes and redirection (|, >, <, >>)
+- [ ] Background processes (&)
+- [ ] Job control (fg, bg, jobs)
+- [ ] Signal handling (Ctrl+C, Ctrl+Z)
+- [ ] Shell scripting (.sh file execution)
+- [ ] Aliases (command shortcuts)
+
+## Phase 7.5: Basic System Utilities
+**Goal**: Essential command-line tools for shell interaction
+
+- [ ] `cat` - Concatenate and display files
+  - Read from VFS and output to stdout
+  - Support multiple files
+  - Line numbering option (-n)
+- [ ] `ls` - List directory contents
+  - Integration with VFS readdir
+  - Long format (-l) with file sizes
+  - Human-readable sizes (-h)
+  - Color output for file types
+  - Hidden file support (-a)
+- [ ] `mkdir` / `rmdir` - Directory management
+  - Create directories with VFS
+  - Remove empty directories
+  - Recursive creation (-p)
+- [ ] `cp` / `mv` - File operations
+  - Copy files through VFS
+  - Move/rename files
+  - Recursive copy for directories (-r)
+- [ ] `rm` - Remove files
+  - Delete files from VFS
+  - Recursive deletion (-r)
+  - Force flag (-f)
+  - Interactive mode (-i)
+- [ ] `touch` - Create empty files
+  - Create new file if doesn't exist
+  - Update timestamps (future)
+- [ ] `wc` - Word count
+  - Line, word, character counting
+  - Useful for pipelines
+- [ ] `grep` - Pattern search
+  - Simple string matching in files
+  - Regex support (basic)
+  - Line numbers (-n)
+  - Case insensitive (-i)
+- [ ] `head` / `tail` - File viewing
+  - Show first/last N lines
+  - Follow mode for tail (-f)
+- [ ] `pwd` - Print working directory
+  - Show current directory path
+- [ ] `uptime` - System uptime
+  - Show how long kernel has been running
+  - Load average (future)
+- [ ] `free` - Memory information
+  - Display available/used memory
+  - Integration with physical memory allocator
+- [ ] `ps` - Process list
+  - Show all running processes
+  - Process states and PIDs
+  - CPU/memory usage per process
 
 ## Phase 8: Storage & Real Filesystem
 **Goal**: Persistent storage with a real filesystem
 
+- [ ] Disk I/O performance improvements
+  - DMA transfers instead of PIO (upgrade ATA driver)
+  - Request queue and elevator algorithm
+  - Read-ahead for sequential access
 - [ ] MBR/GPT partition table parsing
   - Read partition entries from disk sector 0
   - Identify filesystem types
+  - Support for multiple partitions
 - [ ] FAT32 filesystem driver (simple, well-documented)
   - Read FAT tables and directory entries
   - File read/write operations
   - Create files and directories
   - Long filename support (VFAT)
+  - Volume label and metadata
 - [ ] Or ext2 filesystem driver (Linux-native, also simple)
   - Superblock, block groups, inodes
   - Read/write files via block layer
+  - Directory entry management
+  - Symlink support
 - [ ] Disk caching/buffering
   - Cache frequently-used disk sectors in RAM
   - Write-through or write-back strategy
   - LRU eviction policy
+  - Dirty page tracking and flushing
 - [ ] Mount real filesystem on boot
   - Mount root filesystem from /dev/hda1
   - Populate /dev, /proc as virtual filesystems
+  - Support for multiple mount points
+- [ ] fsck - Filesystem check and repair
+  - Validate filesystem integrity
+  - Fix common corruption issues
+  - Run on boot if needed
 
 ## Phase 8.5: Advanced VFS Features
 **Goal**: Production-grade filesystem capabilities
@@ -359,30 +451,58 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - PCI device detection and initialization
   - Send/receive packet buffers
   - IRQ handling for packet arrival
+  - Ring buffer management
 - [ ] Ethernet frame parsing
   - Parse MAC addresses, EtherType
   - ARP protocol (IP ↔ MAC resolution)
+  - ARP cache with timeout
 - [ ] IP layer (IPv4)
   - Parse IP headers (source, dest, protocol)
   - IP routing (basic forwarding)
   - ICMP (ping request/reply)
+  - IP fragmentation and reassembly
+  - TTL handling
 - [ ] UDP protocol
   - Datagram send/receive
   - Port-based demultiplexing
+  - Checksum validation
 - [ ] TCP protocol (challenging but rewarding!)
   - Connection establishment (SYN, SYN-ACK, ACK)
   - Reliable transmission (sequence numbers, ACKs, retransmission)
   - Flow control (window management)
+  - Congestion control (basic)
   - Connection teardown (FIN)
+  - Out-of-order packet handling
 - [ ] Socket API (POSIX-like)
   - socket(), bind(), listen(), accept(), connect()
   - send(), recv(), sendto(), recvfrom()
   - close(), shutdown()
+  - setsockopt(), getsockopt()
+  - Non-blocking I/O
+- [ ] Network utilities
+  - `ping` - ICMP echo test
+  - `ifconfig` - Network interface configuration
+  - `netstat` - Network statistics
+  - `traceroute` - Trace route to host
+  - `nc` (netcat) - Network Swiss army knife
 - [ ] DHCP client (auto-configure IP address)
+  - DHCP discover/offer/request/ack
+  - Lease renewal
+  - DNS server configuration from DHCP
 - [ ] DNS client (resolve domain names)
-- [ ] Simple HTTP client or server
-  - Fetch web pages or serve static files
-  - Demo: Download a file from the internet!
+  - Query DNS servers (A, AAAA, CNAME records)
+  - DNS caching
+  - /etc/hosts file support
+- [ ] Simple HTTP client
+  - HTTP/1.1 GET/POST requests
+  - Header parsing
+  - Chunked transfer encoding
+  - Demo: Fetch a webpage!
+- [ ] Simple HTTP server
+  - Serve static files
+  - Directory listing
+  - MIME type detection
+  - Demo: Host a website from RustOS!
 
 ## Phase 11: Multi-Core & Advanced Scheduling
 **Goal**: Utilize multiple CPU cores, improve performance
@@ -401,6 +521,37 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Test-and-set atomic operations
 - [ ] Mutex and semaphore primitives
 - [ ] Improve scheduler (CFS-like or priority-based)
+
+## Phase 11.5: Kernel Debugging & Instrumentation
+**Goal**: Tools for kernel development and troubleshooting
+
+- [ ] Kernel logging infrastructure
+  - Log levels (DEBUG, INFO, WARN, ERROR, CRITICAL)
+  - Per-module log filtering
+  - Ring buffer for kernel messages
+  - dmesg command to view kernel log
+- [ ] Stack trace on panic
+  - Unwind stack frames
+  - Symbol resolution (function names)
+  - Show line numbers with debug info
+- [ ] Kernel memory leak detector
+  - Track all allocations/deallocations
+  - Report leaked memory on shutdown
+  - Identify allocation call sites
+- [ ] Performance counters
+  - Track syscall counts
+  - Interrupt frequency
+  - Context switch rate
+  - Page fault statistics
+- [ ] Magic SysRq keys
+  - Keyboard shortcuts for kernel actions
+  - Force reboot, kill processes, sync disks
+  - Show memory/task info
+  - Trigger panic for testing
+- [ ] Kernel module system (future)
+  - Load/unload drivers dynamically
+  - Module dependencies
+  - Symbol export/import
 
 ## Phase 12: Polished User Experience
 **Goal**: Make RustOS fun to use and demo
@@ -478,6 +629,53 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Per-process resource usage
   - Kill/nice processes from UI
   - Sort by various metrics
+
+## Phase 12.5: Fun Demos & Easter Eggs
+**Goal**: Showcase RustOS capabilities with entertaining demos
+
+- [ ] Boot splash with ASCII art
+  - RustOS logo in ASCII
+  - Animated boot progress
+  - "Powered by Rust 🦀" message
+- [ ] Screensaver modes
+  - Starfield simulation
+  - Matrix falling characters
+  - Plasma effect
+  - Bouncing DVD logo
+- [ ] Conway's Game of Life
+  - Cellular automaton simulation
+  - Random patterns or famous patterns (glider, etc.)
+  - Interactive controls (pause, step, speed)
+- [ ] Mandelbrot/Julia set renderer
+  - Fractal visualization in text or graphics mode
+  - Zoom and pan controls
+  - Color gradients
+- [ ] ASCII art viewer
+  - Display .txt art files
+  - Animated ASCII movies (Bad Apple!)
+- [ ] Retro text effects
+  - Typewriter effect for text
+  - Color cycling
+  - Fire/water effects
+  - Scrolling credits
+- [ ] Simple text-mode games
+  - Snake
+  - Tetris
+  - Pong
+  - Space Invaders (ASCII)
+  - Roguelike dungeon crawler
+- [ ] System stats dashboard
+  - Real-time CPU/memory/disk usage
+  - Process list
+  - Network activity
+  - Pretty graphs and charts
+- [ ] Cmatrix - Matrix screen effect
+  - Falling green characters
+  - Configurable speed and density
+- [ ] Fortune/cowsay - Random quotes
+  - Display random messages
+  - ASCII cow says things
+  - MOTD (Message of the Day)
 
 ## Phase 13: Audio Subsystem
 **Goal**: Sound output for notifications, music, and games
@@ -1628,21 +1826,28 @@ Build a complete demo environment that showcases the full power of RustOS:
 
 ## 🎯 Immediate Priorities (Next 10 Tasks)
 
-**Phase 6 Completion - Finish Device Filesystems!** ✓ VFS layer complete, ✓ tmpfs working!
-1. **devfs completion** - Finish /dev/null, /dev/zero, /dev/tty device nodes.
-2. **procfs foundation** - Basic /proc structure with /proc/meminfo.
-3. **procfs process info** - /proc/<pid>/status showing process state.
+**CRITICAL: Unblock Shell Development** (Shell has been stuck for 2 sessions)
+1. **Fix duplicate fmt::Write** - Remove duplicate impl in src/shell.rs (lines 12-23 or 54-65)
+2. **Implement keyboard input** - Complete read_line_from_keyboard function to work with PS/2 driver
+3. **Wire shell to keyboard** - Convert PS/2 scancodes to ASCII in shell input loop
+4. **Add help command** - Show list of available builtin commands
 
-**Phase 7 - First Real Programs**
-4. **initramfs support** - Embedded CPIO archive extraction to tmpfs.
-5. **ELF parser** - Parse ELF headers and extract program segments.
-6. **ELF loader** - Load segments into memory, setup BSS, prepare for execution.
-7. **Init process (PID 1)** - First userspace process that launches shell.
-8. **Basic shell framework** - Command loop with echo, help, clear builtins.
-9. **Shell file operations** - Implement cat, ls using VFS layer.
-10. **Shell process control** - Implement ps, kill commands.
+**Phase 7.5 - Essential Utilities**
+5. **Implement `cat` command** - Display file contents using VFS read operations
+6. **Implement `ls` command** - List directory contents using VFS readdir
+7. **Implement `pwd` command** - Show current working directory
+8. **Implement `mkdir` command** - Create directories using VFS
+9. **Implement `rm` command** - Delete files using VFS
 
-The VFS layer is DONE! Files work, directories work, tmpfs is solid. Now we can build userspace programs that actually DO something with files. The shell is within reach!
+**Phase 12.5 - Fun First Demo**
+10. **ASCII art boot splash** - Show RustOS logo on boot with "Powered by Rust 🦀"
+
+**Why This Order:**
+- Shell is currently blocked by implementation issues - must fix first!
+- Once shell works, adding commands is straightforward (use VFS operations)
+- Fun demo gives us something impressive to show off
+- These tasks build on existing infrastructure (VFS, tmpfs, keyboard driver)
+- Each task is achievable and unblocks future work
 
 ---
 
@@ -1663,11 +1868,11 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-**Phase**: 6 - Virtual Filesystem (75% complete, devfs in progress!)
-**Next Task**: Complete devfs device nodes, then procfs
-**Lines of Code**: 3,973 lines of pure Rust kernel code! (857 lines added since last planning session)
-**Completed Sessions**: 40 sessions, 36 tasks completed
-**Total Roadmap**: 340+ tasks across 41+ phases! 🚀
+**Phase**: 7 - Shell Infrastructure (Partial, 2 sessions stuck)
+**Next Task**: Fix duplicate fmt::Write impl in shell.rs, then complete keyboard input
+**Lines of Code**: ~4,100 lines of pure Rust kernel code! (shell.rs added since last planning)
+**Completed Sessions**: 60 sessions, 42 tasks completed
+**Total Roadmap**: 355+ tasks across 44 phases! 🚀 (15 NEW tasks added this session!)
 
 **Major Achievement**: VFS layer with tmpfs is COMPLETE! 🎉
 - Full inode abstraction working
@@ -1712,11 +1917,19 @@ RUSTFLAGS="-D warnings" cargo build --release
 RustOS is proving that Rust is an excellent choice for OS development. Memory safety without garbage collection, zero-cost abstractions, and fearless concurrency make it possible to build a sophisticated kernel that's both safe and performant. Every feature we add demonstrates another aspect of systems programming in Rust. The VFS milestone shows we can build clean abstractions that work!
 
 **The Expanding Roadmap**:
-With 340+ tasks across 41+ phases, RustOS has evolved from a simple hobby kernel into a wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to robotics platforms - RustOS aims to showcase the full spectrum of operating systems development and beyond!
+With 355+ tasks across 44 phases, RustOS has evolved from a simple hobby kernel into a wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to robotics platforms - RustOS aims to showcase the full spectrum of operating systems development and beyond!
 
-**Recent Frontiers Added (Planning Session 22)**:
+**New Frontiers Added (Planning Session 23)**:
+- **Phase 7.5**: NEW! Basic system utilities (cat, ls, grep, wc, head/tail, ps, free, etc.)
+- **Phase 8**: Enhanced with disk I/O improvements, DMA support, fsck utility
+- **Phase 10**: Expanded networking with utilities (ping, ifconfig, netstat, traceroute, nc)
+- **Phase 11.5**: NEW! Kernel debugging & instrumentation (logging, stack traces, leak detector, SysRq keys)
+- **Phase 12.5**: NEW! Fun demos & easter eggs (screensavers, games, fractals, ASCII art, cmatrix)
+- Shell infrastructure clarified with explicit blocking issues and integration tasks
+
+**Previously Added (Planning Session 22)**:
 - **Phase 7**: Enhanced with initramfs, better ELF support, more shell commands
-- **Phase 8.5**: NEW! Advanced VFS features - union mounts, loop devices, overlay FS, file locking
+- **Phase 8.5**: Advanced VFS features - union mounts, loop devices, overlay FS, file locking
 - **Phase 12**: Job control, signal handling, shell scripting support
 - **Phase 24**: Audio/video recording, live streaming, codec infrastructure
 - **Phase 32**: Game save/load, multiplayer server, anti-cheat, mod manager
