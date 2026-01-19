@@ -109,7 +109,7 @@ log "INFO" "========================================"
 export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q8_0
-export OLLAMA_NUM_CTX=12288
+export OLLAMA_NUM_CTX=8192  # Reduced to avoid VRAM issues
 export OLLAMA_KEEP_ALIVE=-1  # Never unload model from VRAM
 
 echo "Starting RustOS continuous development..."
@@ -224,6 +224,8 @@ echo ""
 
 SESSION=0
 STUCK_COUNT=0
+LAST_TASK_HASH=""
+SAME_TASK_COUNT=0
 
 while true; do
     SESSION=$((SESSION + 1))
@@ -232,39 +234,44 @@ while true; do
     DONE=$(grep -c "\[x\]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
     TODO=$(grep -c "\[ \]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
 
-    # Get next 3 unchecked items
-    NEXT_TASKS=$(grep -m3 "\[ \]" AIDER_INSTRUCTIONS.md | sed 's/- \[ \] /  - /')
-    NEXT_TASK_ONELINE=$(echo "$NEXT_TASKS" | head -1 | sed 's/^[[:space:]]*//')
+    # Get next task only (was 3, reduced to 1 for context limits)
+    NEXT_TASKS=$(grep -m1 "\[ \]" AIDER_INSTRUCTIONS.md | sed 's/- \[ \] //')
+    NEXT_TASK_ONELINE=$(echo "$NEXT_TASKS" | sed 's/^[[:space:]]*//')
+
+    # Track if we're stuck on the same task
+    CURRENT_TASK_HASH=$(echo "$NEXT_TASK_ONELINE" | md5sum | cut -d' ' -f1)
+    if [ "$CURRENT_TASK_HASH" = "$LAST_TASK_HASH" ]; then
+        SAME_TASK_COUNT=$((SAME_TASK_COUNT + 1))
+    else
+        SAME_TASK_COUNT=0
+        LAST_TASK_HASH="$CURRENT_TASK_HASH"
+    fi
 
     log "INFO" "--- Session $SESSION started ---"
     log "INFO" "Task: $NEXT_TASK_ONELINE"
-    log "INFO" "Progress: Done=$DONE, Todo=$TODO"
+    log "INFO" "Progress: Done=$DONE, Todo=$TODO, Same task count=$SAME_TASK_COUNT"
 
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║ Session: $SESSION | $(date '+%Y-%m-%d %H:%M:%S')"
     echo "║ Commits: $COMMITS | Done: $DONE | Todo: $TODO"
+    if [ $SAME_TASK_COUNT -gt 5 ]; then
+        echo "║ ⚠ STUCK: Same task for $SAME_TASK_COUNT sessions!"
+    fi
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
     # CHECK BUILD STATUS - tell aider about errors if any
     echo "Checking build status..."
     BUILD_PRE_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
-    # Keep error output small to avoid OOM (15 lines max)
-    BUILD_ERRORS=$(echo "$BUILD_PRE_CHECK" | grep -E "^error|^warning" | head -15)
+    # Keep error output VERY small to avoid context overflow (3 lines max)
+    BUILD_ERRORS=$(echo "$BUILD_PRE_CHECK" | grep -E "^error|^warning" | head -3)
 
     if echo "$BUILD_PRE_CHECK" | grep -q "^error"; then
         echo "⚠ Build has errors - telling aider to fix them first..."
         log "WARN" "Build broken at session start"
         STAT_BUILD_FAILURES=$((STAT_BUILD_FAILURES + 1))
-        BUILD_STATUS_MSG="
-URGENT: The build is currently BROKEN. Fix these errors FIRST before doing anything else:
-
-\`\`\`
-$BUILD_ERRORS
-\`\`\`
-
-After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
-"
+        BUILD_STATUS_MSG="URGENT: Build broken. Fix first:
+$BUILD_ERRORS"
     else
         echo "✓ Build OK"
         log "INFO" "Build OK at session start"
@@ -295,44 +302,17 @@ After fixing, run: RUSTFLAGS=\"-D warnings\" cargo build --release
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
-        Cargo.toml \
         --no-stream \
         --yes \
-        --map-tokens 1024 \
-        --max-chat-history-tokens 2048 \
+        --map-tokens 256 \
+        --max-chat-history-tokens 512 \
         --message "
 $BUILD_STATUS_MSG
-Read AIDER_INSTRUCTIONS.md. Work through unchecked [ ] items.
+Task: $NEXT_TASKS
 
-NEXT TASKS:
-$NEXT_TASKS
-
-CRITICAL: After EVERY change, run:
-  RUSTFLAGS=\"-D warnings\" cargo build --release
-
-Warnings are ERRORS. Code must compile with ZERO warnings before marking [x].
-
-WORKFLOW:
-1. If creating a new module, you MUST create the .rs file FIRST using edit blocks
-2. THEN add 'mod modulename;' to lib.rs
-3. RUN THE BUILD - do not skip this step
-4. Fix ALL errors and warnings
-5. Only mark [x] when build succeeds with no warnings
-6. Move to next task
-
-CRITICAL WARNING: Do NOT add 'mod foo;' to lib.rs without FIRST creating src/foo.rs!
-You MUST use edit blocks to create files - just describing what you would write is NOT enough.
-If you add a mod statement without creating the file, the build WILL fail.
-
-FILE LOCATION: All .rs module files MUST be in the src/ directory, not in the project root!
-  CORRECT: src/pci.rs
-  WRONG: pci.rs (in root)
-
-FILE SIZE LIMIT: Keep each .rs file UNDER 200 LINES. If a module needs more:
-  - Split into submodules: src/ata/mod.rs, src/ata/commands.rs, src/ata/pio.rs
-  - Use 'pub mod submodule;' in the parent mod.rs
-
-Use WHOLE edit format - output complete file contents.
+1. Create files before mod statements
+2. Build after each change: RUSTFLAGS=\"-D warnings\" cargo build --release
+3. Mark [x] only when build passes
 "
 
     EXIT_CODE=$?
@@ -477,6 +457,19 @@ Use WHOLE edit format - output complete file contents.
         STAT_STUCK_EVENTS=$((STAT_STUCK_EVENTS + 1))
         echo "No progress made (stuck count: $STUCK_COUNT)"
         log "WARN" "No progress, stuck count: $STUCK_COUNT"
+    fi
+
+    # Escalate if stuck on same task for too long OR no commits
+    if [ $STUCK_COUNT -ge 2 ] || [ $SAME_TASK_COUNT -ge 8 ]; then
+        if [ $SAME_TASK_COUNT -ge 8 ]; then
+            echo ""
+            echo "════════════════════════════════════════════════════════════"
+            echo "⚠ TASK LOOP DETECTED: Same task for $SAME_TASK_COUNT sessions!"
+            echo "Local AI is making changes but not completing the task."
+            echo "Escalating to Claude Code..."
+            echo "════════════════════════════════════════════════════════════"
+            log "WARN" "Task loop: $SAME_TASK_COUNT sessions on same task"
+        fi
 
         if [ $STUCK_COUNT -ge 2 ]; then
             echo ""
@@ -486,18 +479,30 @@ Use WHOLE edit format - output complete file contents.
             log "INFO" "Escalating to Claude Code"
             STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
             # Keep output small to avoid context overflow (just errors)
-            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -20)
+            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -5)
 
             # Snapshot file state before Claude runs
             FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
             INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
+            # Build extended context if stuck on same task
+            CONTEXT_MSG="The local AI (aider with qwen3-30b) is stuck on this RustOS project."
+            if [ $SAME_TASK_COUNT -ge 8 ]; then
+                CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
+1. Too vague or ambiguous
+2. Already complete (but needs checkbox marking)
+3. Impossible with current codebase
+4. Misunderstood by the local AI
+
+Please investigate whether the task is actually done, needs clarification, or should be skipped."
+            fi
+
             # Run Claude non-interactively with --print and skip permissions
             # --dangerously-skip-permissions allows file edits and bash without prompts
             timeout 300 claude --print --dangerously-skip-permissions "
-The local AI (aider with qwen3-30b) is stuck on this RustOS project.
+$CONTEXT_MSG
 
-Current task from AIDER_INSTRUCTIONS.md:
+Current task from AIDER_INSTRUCTIONS.md (attempted $SAME_TASK_COUNT times):
 $NEXT_TASKS
 
 Last build output:
@@ -505,13 +510,15 @@ $BUILD_OUTPUT
 
 Please:
 1. Read src/lib.rs and any relevant source files
-2. Create or fix the files needed for the current task
-3. Run: RUSTFLAGS=\"-D warnings\" cargo build --release
-4. Fix any errors until build passes with zero warnings
-5. Update AIDER_INSTRUCTIONS.md to mark [x] the completed task
-6. Commit and push the changes
+2. Determine if the task is actually complete (if so, just mark [x])
+3. If not complete, create or fix the files needed
+4. Run: RUSTFLAGS=\"-D warnings\" cargo build --release
+5. Fix any errors until build passes with zero warnings
+6. Update AIDER_INSTRUCTIONS.md to mark [x] the completed task
+7. If the task is impossible/unclear, mark [x] with a note and move on
+8. Commit and push the changes
 
-Work autonomously until the task is complete.
+Work autonomously until the task is resolved.
 "
             CLAUDE_EXIT=$?
             log "INFO" "Claude exited with code $CLAUDE_EXIT"
@@ -561,6 +568,8 @@ Work autonomously until the task is complete.
                     fi
                 fi
                 STUCK_COUNT=0
+                # Reset same-task counter if Claude intervened successfully
+                SAME_TASK_COUNT=0
             fi
         fi
     fi
