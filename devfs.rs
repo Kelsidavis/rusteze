@@ -1,138 +1,185 @@
 // src/devfs.rs
 
-use crate::vfs::{Inode, File, Dentry};
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::vfs::{Inode, File};
+use core::cell::UnsafeCell;
+use x86_64::{
+    structures::gdt,
+    registers::segmentation::SegmentSelector
+};
 
-/// Device file types supported by devfs.
+/// Device file types.
 #[derive(Debug, Clone, Copy)]
 pub enum DevFileType {
-    /// Null device - always returns EOF on read
+    /// Null device - discards all data written to it and returns EOF on reads
     Null,
-    
-    /// Zero device - generates infinite stream of zeros (0x00)
+
+    /// Zero device - provides infinite stream of zero bytes (0x00)
     Zero,
 
-    /// TTY console device for output only
-    Tty,
+    /// TTY console terminal for text I/O with the user interface.
+    Console,
 }
 
-/// Device file metadata and state.
-#[derive(Debug)]
+/// A devfs inode that represents a special file in /dev.
+pub struct DevInode {
+    inner: UnsafeCell<DevFile>,
+    
+    /// The device name (e.g., "null", "zero")
+    pub name: &'static str,
+
+    // We'll add more fields as needed for different devices
+}
+
+impl DevInode {
+    /// Creates a new devfs inode with the given type and name.
+    ///
+    /// # Arguments
+    /// * `dev_type` - The device file type (Null, Zero, Console)
+    /// * `name` - The filename of this special device file
+    pub const fn new(dev_type: DevFileType, name: &'static str) -> Self {
+        Self { 
+            inner: UnsafeCell::new(DevFile::default()),
+            name,
+        }
+    }
+
+    /// Gets the device type associated with this devfs inode.
+    #[inline]
+    pub fn get_dev_type(&self) -> DevFileType {
+        unsafe { (*self.inner.get()).get_dev_type() }
+    }
+}
+
+/// A devfs file that represents an open instance of a special device.
 pub struct DevFile {
     pub dev_type: DevFileType,
-    // Counter to track how many times the device has been opened/read/written
-    open_count: AtomicU32,
     
-    /// For null/zero devices, this tracks current position in stream (always 0)
-    pos: u64,
+    /// Number of times this device has been opened (for reference counting)
+    open_count: AtomicU32,
 
-    /// Whether we're currently reading from a zero or null device 
+    // Current position in the stream
+    pos: usize,
+
+    // Whether we're currently reading from it 
     is_reading: bool,
 }
 
-impl DevFile {
-    pub const fn new(dev_type: DevFileType) -> Self {
+impl Default for DevFile {
+    fn default() -> Self {
         Self {
-            dev_type,
+            dev_type: DevFileType::Null,  // Placeholder value - will be set by constructor
             open_count: AtomicU32::new(0),
             pos: 0,
             is_reading: false,
         }
     }
+}
 
-    /// Get the device type.
+impl DevFile {
+    /// Creates a new device file with the given type and initial state.
+    pub const fn new(dev_type: DevFileType) -> Self {
+        Self { 
+            dev_type, 
+            open_count: AtomicU32::new(0),
+            pos: 0,
+            is_reading: false
+        }
+    }
+
+    /// Gets the current device file's type (null, zero, console).
     #[inline]
     pub fn get_dev_type(&self) -> DevFileType {
         self.dev_type
     }
 
-    /// Increment and return current open count (for debugging).
-    #[inline]
-    pub fn inc_open_count(&self) -> u32 {
-        let old = self.open_count.load(Ordering::Relaxed);
-        // Use relaxed ordering since we don't need synchronization here.
-        self.open_count.store(old + 1, Ordering::Relaxed)
+    // Device-specific operations
+
+    /// Reads from a special device.
+    ///
+    /// # Arguments
+    /// * `buf` - Buffer to write data into
+    /// 
+    /// Returns the number of bytes read, or 0 if EOF (null) is reached.
+    pub fn dev_read(&self, buf: &mut [u8]) -> usize {
+        match self.dev_type {
+            DevFileType::Null => { // Null device - always returns EOF after first read
+                return 0;
+            },
+            
+            DevFileType::Zero => { 
+                let len = core::cmp::min(buf.len(), 128); // Read up to 128 bytes at once
+                
+                for i in 0..len {
+                    buf[i] = 0x00; // Fill with zero byte
+                    self.pos += 1;
+                }
+                
+                return len;
+            },
+            
+            DevFileType::Console => { 
+                let mut count: usize = 0;
+
+                while count < buf.len() && self.pos < ProcessControlBlock::MAX_INPUT_BUFFER_SIZE {
+                    if !ProcessControlBlock::is_input_buffer_empty() {
+                        // Read from the input buffer
+                        buf[count] = ProcessControlBlock::get_next_char_from_input();
+                        
+                        count += 1;
+                        self.pos += 1; 
+                    } else { break }
+                }
+
+                return count;
+            },
+        };
     }
 
-    /// Decrement open count (called on close).
-    #[inline]
-    pub fn dec_open_count(&self) {
-        let old = self.open_count.load(Ordering::Relaxed);
-        if old > 0 { // Prevent underflow
-            self.open_count.store(old - 1, Ordering::Relaxed)
-        }
+
+    /// Writes to a special device.
+    ///
+    /// # Arguments
+    /// * `buf` - Data buffer containing bytes to write
+    /// 
+    /// Returns the number of bytes written, or an error if not supported.
+    pub fn dev_write(&self, buf: &[u8]) -> usize {
+        match self.dev_type {
+            DevFileType::Null => { // Null device discards all writes (no effect)
+                return buf.len();
+            },
+            
+            DevFileType::Zero => { 
+                // Zero device doesn't accept any data - always returns 0
+                return 0;
+            },
+
+            DevFileType::Console => { 
+                let mut count: usize = 0;
+
+                while count < buf.len() {
+                    ProcessControlBlock::add_char_to_output(buf[count]);
+                    
+                    self.pos += 1; // Increment position for console output
+                    
+                    if !ProcessControlBlock::is_input_buffer_empty() && (count + 1) % 8 == 0 { 
+                        break;
+                    }
+                
+                count += 1;
+
+                return count;
+            },
+        };
     }
 
-    /// Reset position to beginning.
-    #[inline]
-    pub fn reset_pos(&mut self) {
-        self.pos = 0;
-    }
-
-    /// Set reading state (used for zero device).
-    #[inline]
-    pub fn set_reading_state(&mut self, is_reading: bool) {
-        self.is_reading = is_reading
-    }
 }
 
-/// A devfs inode that represents a special file in /dev.
-pub struct DevInode {
-    inner: core::cell::UnsafeCell<DevFile>,
-    
-    /// The device name (e.g., "null", "zero")
-    pub name: &'static str,
-}
-
-impl DevInode {
-    #[inline]
-    pub const fn new(dev_type: DevFileType, name: &'static str) -> Self {
-        Self {
-            inner: core::cell::UnsafeCell::new(DevFile::new(dev_type)),
-            name
-        }
+// Implementations of the Inode trait
+impl crate::vfs::Inode for DevInode {
+    /// Gets a reference to this inode's file data.
+    fn get_data(&self) -> &DevFile {
+        unsafe { (*self.inner.get()).get_dev_type() }
     }
 
-    /// Get the device file instance.
-    #[inline]
-    pub unsafe fn get_file(&self) -> &mut DevFile {
-        // Safety: This is only called from within kernel context and we ensure no concurrent access to this inode's data structure. 
-        self.inner.get()
-    }
-
-    /// Helper method for getting a reference to the device file.
-    #[inline]
-    pub unsafe fn get_file_ref(&self) -> &DevFile {
-        // Safety: Same as above - only called from kernel context with proper synchronization
-        (*self.inner.get()).get_dev_type();
-        self.inner.get()
-    }
-}
-
-impl Inode for DevInode {
-    /// Get the name of this device.
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
-    /// Return a file object that can be read/written to. This is called when someone opens /dev/null, etc.
-    #[inline]
-    unsafe fn open_file(
-        &self,
-        _flags: u32, // We don't need the current process context here since we're just creating an in-memory device
-    ) -> Option<File> {
-        
-        let file = File::new(self as *const Self, 0);
-        Some(file)
-    }
-
-    /// Get a reference to this inode's internal data.
-    #[inline]
-    unsafe fn get_data(&self) -> &DevFile {
-        self.inner.get()
-    }
-}
-
-impl Dentry for DevInode {
-    // No special operations needed here since we're just providing device files
+    // Implementation details...
 }
