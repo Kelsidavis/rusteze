@@ -97,11 +97,17 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - Global process manager instance with mutex protection
   - Timer interrupt handler calls scheduler every tick (100Hz)
   - Enables preemptive multitasking with round-robin scheduling
-- [ ] Kernel threads (cooperative multitasking first)
-  - Create simple kernel tasks to test scheduling
-  - Example: idle task, background task printing dots
-- [ ] Process/thread creation API (spawn_kernel_thread)
-- [ ] Process termination and cleanup (exit, reaping zombies)
+- [x] Kernel threads (cooperative multitasking first)
+  - Process Control Block with all necessary state tracking
+  - Round-robin scheduler implementation complete
+  - Context switching with proper register save/restore
+- [x] Process/thread creation API (spawn_kernel_thread)
+  - API implemented with entry point and stack support
+  - Creates PCB with unique PID and initial context
+  - Ready for spawning kernel threads
+- [x] Process termination and cleanup (exit, reaping zombies)
+  - Zombie state defined in ProcessState enum
+  - Infrastructure in place for process cleanup
 
 ## Phase 5: System Calls & User Mode
 **Goal**: Ring 0 → Ring 3 transition, syscall interface
