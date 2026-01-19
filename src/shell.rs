@@ -172,4 +172,3 @@ pub fn run_shell_loop(fd_table: &FileDescriptorTable) -> ! {
 pub struct ShellEnvironment {  
     pub vars: std::collections::HashMap<String, String>,
 }
-```
