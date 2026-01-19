@@ -303,12 +303,13 @@ $BUILD_ERRORS"
     # Let aider discover files via repo map instead of pre-loading
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
     log "INFO" "Starting aider session"
-    timeout 900 aider \
+    # Force small context to prevent VRAM overflow
+    OLLAMA_NUM_CTX=4096 timeout 900 aider \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 128 \
-        --max-chat-history-tokens 256 \
+        --map-tokens 64 \
+        --max-chat-history-tokens 128 \
         --message "
 $BUILD_STATUS_MSG
 $NEXT_TASKS
@@ -469,37 +470,37 @@ Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
             echo "Escalating to Claude Code..."
             echo "════════════════════════════════════════════════════════════"
             log "WARN" "Task loop: $SAME_TASK_COUNT sessions on same task"
-        fi
-
-        if [ $STUCK_COUNT -ge 2 ]; then
+        elif [ $STUCK_COUNT -ge 2 ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "Calling Claude Code for help..."
             echo "════════════════════════════════════════════════════════════"
-            log "INFO" "Escalating to Claude Code"
-            STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
-            # Keep output small to avoid context overflow (just errors)
-            BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -5)
+        fi
 
-            # Snapshot file state before Claude runs
-            FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
-            INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+        log "INFO" "Escalating to Claude Code"
+        STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
+        # Keep output small to avoid context overflow (just errors)
+        BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -5)
 
-            # Build extended context if stuck on same task
-            CONTEXT_MSG="The local AI (aider with qwen3-30b) is stuck on this RustOS project."
-            if [ $SAME_TASK_COUNT -ge 8 ]; then
-                CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
+        # Snapshot file state before Claude runs
+        FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
+        INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+
+        # Build extended context if stuck on same task
+        CONTEXT_MSG="The local AI (aider with qwen3-30b) is stuck on this RustOS project."
+        if [ $SAME_TASK_COUNT -ge 8 ]; then
+            CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
 1. Too vague or ambiguous
 2. Already complete (but needs checkbox marking)
 3. Impossible with current codebase
 4. Misunderstood by the local AI
 
 Please investigate whether the task is actually done, needs clarification, or should be skipped."
-            fi
+        fi
 
-            # Run Claude non-interactively with --print and skip permissions
-            # --dangerously-skip-permissions allows file edits and bash without prompts
-            timeout 300 claude --print --dangerously-skip-permissions "
+        # Run Claude non-interactively with --print and skip permissions
+        # --dangerously-skip-permissions allows file edits and bash without prompts
+        timeout 300 claude --print --dangerously-skip-permissions "
 $CONTEXT_MSG
 
 Current task from AIDER_INSTRUCTIONS.md (attempted $SAME_TASK_COUNT times):
