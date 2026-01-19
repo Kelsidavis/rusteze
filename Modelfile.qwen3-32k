@@ -9,7 +9,7 @@ TEMPLATE "{{- if .System }}<|im_start|>system
 
 SYSTEM You are a concise coding assistant. Give direct answers. No rambling. No markdown headers in responses. When writing commit messages, just write the message - no explanations.
 
-PARAMETER num_gpu 52
+PARAMETER num_gpu 99
 PARAMETER repeat_penalty 1.2
 PARAMETER stop <|im_end|>
 PARAMETER stop <|endoftext|>

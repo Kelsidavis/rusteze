@@ -105,19 +105,15 @@ log "INFO" "========================================"
 log "INFO" "dev.sh started"
 log "INFO" "========================================"
 
-# Use both GPUs - offload some layers to reduce VRAM pressure
-# Unset CUDA_VISIBLE_DEVICES to allow ollama to see all GPUs
+# Use both GPUs - unset to allow ollama to see all GPUs
 unset CUDA_VISIBLE_DEVICES
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q4_0
 export OLLAMA_NUM_CTX=12288
-export OLLAMA_KEEP_ALIVE="5m"
-# Offload layers across GPUs to spread VRAM usage
+export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_NUM_GPU=2
-# Offload 10-12 layers to CPU (model has ~60-64 layers)
-export OLLAMA_GPU_LAYERS=99
-# Tensor split: 20% on GPU 0 (GTX 1650), 80% on GPU 1 (RTX 5080)
-export OLLAMA_TENSOR_SPLIT="10,90"
+export OLLAMA_GPU_LAYERS=50  # Offload some layers to CPU to avoid OOM
+# Note: Ollama auto-distributes layers across GPUs since v0.11.5
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
@@ -127,7 +123,7 @@ echo ""
 # Kill any existing ollama/aider processes and reap zombies
 echo "Cleaning up any existing processes..."
 pkill -9 -f "ollama" 2>/dev/null
-pkill -9 -f "aider" 2>/dev/null
+pkill -9 -f "bin/aider" 2>/dev/null
 
 # Reap any zombie children from this shell
 wait 2>/dev/null
@@ -358,7 +354,7 @@ Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
         echo "Killing aider and restarting ollama..."
         log "WARN" "Aider timed out (15 min limit)"
         STAT_AIDER_TIMEOUTS=$((STAT_AIDER_TIMEOUTS + 1))
-        pkill -9 -f "aider" 2>/dev/null
+        pkill -9 -f "bin/aider" 2>/dev/null
     fi
 
     if [ $EXIT_CODE -ne 0 ]; then
