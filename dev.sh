@@ -105,12 +105,15 @@ log "INFO" "========================================"
 log "INFO" "dev.sh started"
 log "INFO" "========================================"
 
-# Use only the RTX 5080 (GPU 1)
-export CUDA_VISIBLE_DEVICES=GPU-707f560b-e5d9-3fea-9af2-c6dd2b77abbe
+# Use both GPUs - offload some layers to reduce VRAM pressure
+# Unset CUDA_VISIBLE_DEVICES to allow ollama to see all GPUs
+unset CUDA_VISIBLE_DEVICES
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q8_0
-export OLLAMA_NUM_CTX=8192  # Reduced to avoid VRAM issues
-export OLLAMA_KEEP_ALIVE=-1  # Never unload model from VRAM
+export OLLAMA_NUM_CTX=8192
+export OLLAMA_KEEP_ALIVE=-1
+# Offload layers across GPUs to spread VRAM usage
+export OLLAMA_NUM_GPU=2
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
@@ -301,18 +304,15 @@ $BUILD_ERRORS"
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
     log "INFO" "Starting aider session"
     timeout 900 aider \
-        AIDER_INSTRUCTIONS.md \
         --no-stream \
         --yes \
-        --map-tokens 256 \
-        --max-chat-history-tokens 512 \
+        --auto-commits \
+        --map-tokens 128 \
+        --max-chat-history-tokens 256 \
         --message "
 $BUILD_STATUS_MSG
-Task: $NEXT_TASKS
-
-1. Create files before mod statements
-2. Build after each change: RUSTFLAGS=\"-D warnings\" cargo build --release
-3. Mark [x] only when build passes
+$NEXT_TASKS
+Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
 "
 
     EXIT_CODE=$?
