@@ -129,6 +129,12 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
     // Increment the tick counter
     crate::pit::tick();
 
+    // Perform context switch to next process (if scheduler is initialized)
+    // Note: This is called every timer tick (100Hz), enabling preemptive multitasking
+    unsafe {
+        crate::process::PROCESS_MANAGER.lock().schedule();
+    }
+
     // Send EOI (End of Interrupt) to PIC1
     unsafe {
         x86_64::instructions::port::Port::<u8>::new(PIC1_COMMAND).write(PIC_EOI);

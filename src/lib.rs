@@ -19,6 +19,7 @@ mod keyboard;
 mod ps2_mouse; // Added mouse module
 mod pci;  // New PCI enumeration module
 mod ata;  // ATA/IDE disk driver
+mod process; // Process management and scheduling
 
 use x86_64::structures::paging::{PhysFrame, Size4KiB, Page};
 use x86_64::{VirtAddr, PhysAddr};
@@ -90,7 +91,11 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     // Initialize the PS/2 mouse driver
     ps2_mouse::init_mouse();
     println!("PS/2 mouse driver initialized");
-    
+
+    // Initialize the process manager (scheduler)
+    process::init_process_manager();
+    println!("Process manager initialized (round-robin scheduler)");
+
     // Enable hardware interrupts
     idt::enable_interrupts();
     println!("Hardware interrupts enabled");

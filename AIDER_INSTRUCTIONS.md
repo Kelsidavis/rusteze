@@ -93,8 +93,10 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - Implemented proper inline assembly with correct register save/restore
   - Saves ALL registers including r8-r15, rflags, segment registers
   - Handles stack switching correctly with proper RIP save/restore
-- [ ] Integrate scheduler with timer interrupt (PIT)
-  - On each timer tick, save current context and load next process
+- [x] Integrate scheduler with timer interrupt (PIT)
+  - Global process manager instance with mutex protection
+  - Timer interrupt handler calls scheduler every tick (100Hz)
+  - Enables preemptive multitasking with round-robin scheduling
 - [ ] Kernel threads (cooperative multitasking first)
   - Create simple kernel tasks to test scheduling
   - Example: idle task, background task printing dots

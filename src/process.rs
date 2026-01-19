@@ -67,6 +67,7 @@ impl Default for CpuContext {
 
 /// Possible states a process can be in.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 pub enum ProcessState {
     /// Ready to run (waiting for CPU time)
     Ready,
@@ -264,6 +265,7 @@ impl RoundRobinScheduler {
     }
 
     /// Get current process count
+    #[allow(dead_code)]
     pub fn process_count(&self) -> usize {
         self.processes.len()
     }
@@ -272,6 +274,7 @@ impl RoundRobinScheduler {
 /// Global process manager
 pub struct ProcessManager {
     scheduler: RoundRobinScheduler,
+    #[allow(dead_code)]
     next_pid: u32,
 }
 
@@ -298,6 +301,7 @@ impl ProcessManager {
     /// # Safety
     /// The entry point must be a valid function pointer that never returns.
     /// The stack must be properly aligned and valid.
+    #[allow(dead_code)]
     pub unsafe fn spawn_kernel_thread(
         &mut self,
         entry_point: extern "C" fn() -> !,
@@ -357,10 +361,21 @@ impl ProcessManager {
     }
 
     /// Get the number of processes
+    #[allow(dead_code)]
     pub fn process_count(&self) -> usize {
         self.scheduler.process_count()
     }
 }
 
-// Note: Global process manager would be initialized in main
-// For now, we just provide the types for when it's needed
+use spin::Mutex;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Global process manager instance
+    pub static ref PROCESS_MANAGER: Mutex<ProcessManager> = Mutex::new(ProcessManager::new());
+}
+
+/// Initialize the process manager (must be called once at boot)
+pub fn init_process_manager() {
+    PROCESS_MANAGER.lock().init();
+}
