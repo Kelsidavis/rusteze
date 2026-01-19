@@ -198,17 +198,25 @@ impl Shell {
                             env_vars.set(key.to_string(), *value);  
                             
                             // Update PATH
-                            if key == "PATH" || &*key.starts_with("PATH") ||
-                               (&*key.contains("=") && !&*command.trim().is_empty()) &&
-                                (!env_vars.vars.iter()
-                                                    .any(|(k, _)| k.starts_with(&part[..1]))) 
-                                    ) {
+                            if key == "PATH" || &*key.starts_with("PATH") {
+                                let new_path = format!("{}:{}", env_vars.get(&env_vars.vars[0].1), *value);
+                                env_vars.set("PATH".to_string(), new_path);
                                 
+                                return Ok(());
                             }
                         },
                         
                         // Handle export VAR
-                        [var] => { env_vars.set(var.to_string(), String::new()); },  
+                        [var] => { 
+                            if var == "PATH" {
+                                let current_value = env_vars.get(var).unwrap_or(&String::new());
+                                env_vars.set(var.to_string(), format!("{}:{}", *current_value, String::from("")));
+                                
+                                return Ok(());
+                            } else {
+                                env_vars.set(var.to_string(), String::new());  
+                            }
+                        }, 
                             
                         _ => return Err("Invalid syntax for export"),
                     }
