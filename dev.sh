@@ -109,11 +109,15 @@ log "INFO" "========================================"
 # Unset CUDA_VISIBLE_DEVICES to allow ollama to see all GPUs
 unset CUDA_VISIBLE_DEVICES
 export OLLAMA_FLASH_ATTENTION=1
-export OLLAMA_KV_CACHE_TYPE=q8_0
-export OLLAMA_NUM_CTX=8192
-export OLLAMA_KEEP_ALIVE=-1
+export OLLAMA_KV_CACHE_TYPE=q4_0
+export OLLAMA_NUM_CTX=12288
+export OLLAMA_KEEP_ALIVE="5m"
 # Offload layers across GPUs to spread VRAM usage
 export OLLAMA_NUM_GPU=2
+# Offload 10-12 layers to CPU (model has ~60-64 layers)
+export OLLAMA_GPU_LAYERS=99
+# Tensor split: 20% on GPU 0 (GTX 1650), 80% on GPU 1 (RTX 5080)
+export OLLAMA_TENSOR_SPLIT="10,90"
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
@@ -175,13 +179,32 @@ load_model() {
 
         # Use timeout on curl to prevent hanging
         if timeout $timeout_secs curl -s http://localhost:11434/api/generate -d '{
-          "model": "qwen3-30b-aider:latest",
+          "model": "qwen3-30b-aider:32k",
           "prompt": "hi",
           "stream": false,
           "options": {"num_predict": 1}
         }' >/dev/null 2>&1; then
             echo "Model loaded successfully."
             log "INFO" "Model loaded successfully"
+
+            # Warmup: pre-allocate KV cache with realistic prompt
+            echo "Warming up model..."
+            log "INFO" "Warming up model KV cache"
+            timeout 120 curl -s http://localhost:11434/api/generate -d '{
+              "model": "qwen3-30b-aider:32k",
+              "prompt": "You are a coding assistant. Implement the next feature.",
+              "stream": false,
+              "options": {"num_predict": 20}
+            }' >/dev/null 2>&1
+
+            if [ $? -eq 0 ]; then
+                echo "✓ Model warmed up and ready"
+                log "INFO" "Model warmup completed successfully"
+            else
+                echo "⚠ Warmup timed out, but model is loaded"
+                log "WARN" "Model warmup timed out but continuing"
+            fi
+
             return 0
         else
             echo "Model load failed or timed out."
@@ -237,9 +260,9 @@ while true; do
     DONE=$(grep -c "\[x\]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
     TODO=$(grep -c "\[ \]" AIDER_INSTRUCTIONS.md 2>/dev/null || echo "0")
 
-    # Get next task only (was 3, reduced to 1 for context limits)
-    NEXT_TASKS=$(grep -m1 "\[ \]" AIDER_INSTRUCTIONS.md | sed 's/- \[ \] //')
-    NEXT_TASK_ONELINE=$(echo "$NEXT_TASKS" | sed 's/^[[:space:]]*//')
+    # Get next 3 unchecked items
+    NEXT_TASKS=$(grep -m3 "\[ \]" AIDER_INSTRUCTIONS.md | sed 's/- \[ \] /  - /')
+    NEXT_TASK_ONELINE=$(echo "$NEXT_TASKS" | head -1 | sed 's/^[[:space:]]*//')
 
     # Track if we're stuck on the same task
     CURRENT_TASK_HASH=$(echo "$NEXT_TASK_ONELINE" | md5sum | cut -d' ' -f1)
@@ -266,15 +289,21 @@ while true; do
     # CHECK BUILD STATUS - tell aider about errors if any
     echo "Checking build status..."
     BUILD_PRE_CHECK=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1)
-    # Keep error output VERY small to avoid context overflow (3 lines max)
-    BUILD_ERRORS=$(echo "$BUILD_PRE_CHECK" | grep -E "^error|^warning" | head -3)
+    # Show more errors with larger context available (20 lines)
+    BUILD_ERRORS=$(echo "$BUILD_PRE_CHECK" | grep -E "^error|^warning" | head -20)
 
     if echo "$BUILD_PRE_CHECK" | grep -q "^error"; then
         echo "⚠ Build has errors - telling aider to fix them first..."
         log "WARN" "Build broken at session start"
         STAT_BUILD_FAILURES=$((STAT_BUILD_FAILURES + 1))
-        BUILD_STATUS_MSG="URGENT: Build broken. Fix first:
-$BUILD_ERRORS"
+        BUILD_STATUS_MSG="URGENT: Build is broken. Fix these errors FIRST:
+
+\`\`\`
+$BUILD_ERRORS
+\`\`\`
+
+After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
+"
     else
         echo "✓ Build OK"
         log "INFO" "Build OK at session start"
@@ -303,17 +332,20 @@ $BUILD_ERRORS"
     # Let aider discover files via repo map instead of pre-loading
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
     log "INFO" "Starting aider session"
-    # Force small context to prevent VRAM overflow
-    OLLAMA_NUM_CTX=4096 timeout 900 aider \
+    timeout 900 aider \
+        AIDER_INSTRUCTIONS.md \
+        --model ollama/qwen3-30b-aider:32k \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 64 \
-        --max-chat-history-tokens 128 \
+        --map-tokens 1024 \
+        --max-chat-history-tokens 2048 \
         --message "
 $BUILD_STATUS_MSG
-$NEXT_TASKS
-Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
+Work on: $NEXT_TASKS
+
+After EVERY change: RUSTFLAGS=\"-D warnings\" cargo build --release
+Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
 "
 
     EXIT_CODE=$?
@@ -340,6 +372,13 @@ Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
 
         STAT_OLLAMA_RESTARTS=$((STAT_OLLAMA_RESTARTS + 1))
 
+        # Explicitly unload model from VRAM before killing ollama
+        echo "Unloading model from VRAM..."
+        curl -s -X DELETE http://localhost:11434/api/generate \
+            -d '{"model":"qwen3-30b-aider:32k","keep_alive":0}' \
+            --max-time 5 2>/dev/null || true
+        sleep 2
+
         # Kill all ollama processes and reap zombies
         pkill -9 -f "ollama" 2>/dev/null
         wait 2>/dev/null
@@ -354,9 +393,13 @@ Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
             sleep 1
         done
 
+        # Force VRAM cleanup - wait for GPU to fully release memory
+        echo "Waiting for VRAM cleanup..."
+        sleep 8
+
         # Start fresh instance and load model using the robust function
         ollama serve &>/dev/null &
-        sleep 3
+        sleep 5
         load_model
     fi
 
@@ -479,8 +522,8 @@ Read AIDER_INSTRUCTIONS.md. Mark [x] when done.
 
         log "INFO" "Escalating to Claude Code"
         STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
-        # Keep output small to avoid context overflow (just errors)
-        BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -5)
+        # Show reasonable amount of errors for debugging
+        BUILD_OUTPUT=$(RUSTFLAGS="-D warnings" cargo build --release 2>&1 | grep -E "^error|^warning" | head -20)
 
         # Snapshot file state before Claude runs
         FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
