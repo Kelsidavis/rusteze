@@ -12,12 +12,14 @@
 **What makes RustOS unique:**
 - Pure Rust kernel with memory safety guarantees and zero legacy C code
 - Clean architecture built from first principles - understandable and hackable
-- Wildly ambitious roadmap: 270+ tasks spanning 35 phases from basics to quantum computing
-- Not just an OS - a platform for gaming, development, collaboration, and research
-- Practical progression: Shell → networking → multimedia → distributed systems → innovation
+- Wildly ambitious roadmap: 330+ tasks spanning 41 phases from basics to robotics
+- Not just an OS - a platform for gaming, development, collaboration, research, and automation
+- Practical progression: Shell → networking → multimedia → distributed systems → robotics → innovation
 - Educational value: Perfect reference for modern OS development in Rust
 - Research platform: Experiment with novel OS concepts in a safe, modern language
 - Entertainment focus: Games, emulators, media playback, and creative tools
+- Production-ready features: Security hardening, power management, cloud-native integrations
+- Emerging tech: Robotics platform with ROS compatibility, autonomous navigation, sensor fusion
 
 **The Long-Term Dream:**
 - Boot to a graphical desktop environment with compositing window manager
@@ -37,11 +39,33 @@
 - **Social features**: Multiplayer frameworks, instant messaging, collaborative tools
 
 **The Ultimate Vision:**
-RustOS isn't just an operating system - it's a complete computing environment that showcases the full potential of Rust for systems programming. From booting bare metal to running distributed workloads across clusters, from playing retro games to simulating quantum circuits, from editing code collaboratively to chatting over video - RustOS aims to do it all, safely and efficiently, in pure Rust.
+RustOS isn't just an operating system - it's a complete computing environment that showcases the full potential of Rust for systems programming. From booting bare metal to running distributed workloads across clusters, from playing retro games to controlling autonomous robots, from simulating quantum circuits to powering serverless functions, from editing code collaboratively to debugging with sanitizers and fuzzers - RustOS aims to do it all, safely, efficiently, and sustainably, in pure Rust.
+
+**New Horizons Unlocked:**
+- **Debugging Excellence**: Core dumps, kernel debuggers, memory/thread sanitizers, fuzzing infrastructure
+- **Enterprise Storage**: LVM, object storage (S3-compatible), time-series & in-memory databases
+- **Green Computing**: Power management, sleep states, thermal control, battery optimization
+- **Security-First**: Secure boot, KASLR, MAC policies, kernel exploit mitigations, audit logging
+- **Cloud-Native**: gRPC, GraphQL, serverless runtime, Kubernetes integration, service mesh
+- **Robotics Ready**: ROS compatibility, motion planning, sensor fusion, computer vision, autonomous navigation
 
 ---
 
 ## 🎉 Recent Achievements
+
+**Planning Session 21 Highlights** (2026-01-19):
+- ✓ Code compiles cleanly with no warnings!
+- ✓ Phase 5 (System Calls & User Mode) is 92% complete - just need user stack and iretq!
+- ✓ Expanded roadmap from 270 to 330+ tasks (60 new tasks added!)
+- ✓ Added 6 major new phases covering critical real-world capabilities:
+  - Phase 36: Advanced debugging (sanitizers, fuzzers, kernel debugger)
+  - Phase 37: Enterprise storage (LVM, object storage, databases)
+  - Phase 38: Power management (green computing, battery optimization)
+  - Phase 39: Security hardening (secure boot, KASLR, sandboxing)
+  - Phase 40: Cloud-native features (gRPC, Kubernetes, serverless)
+  - Phase 41: Robotics & automation (ROS, SLAM, autonomous navigation)
+- ✓ Clarified immediate priorities: Complete Phase 5, then VFS foundation
+- ✓ Added practical demo ideas for all new phases
 
 **Hardware Foundation (COMPLETE)**:
 - Full interrupt handling (IDT, PIC, exceptions)
@@ -50,12 +74,15 @@ RustOS isn't just an operating system - it's a complete computing environment th
 - Input devices (PS/2 keyboard + mouse)
 - Storage (PCI enumeration, ATA/IDE disk driver in PIO mode)
 
-**Process Infrastructure (IN PROGRESS)**:
-- Process Control Block with register state
-- Basic context switching scaffolding
-- Round-robin scheduler structure
+**System Calls & User Mode (92% COMPLETE)**:
+- Process Control Block with full context save/restore
+- Context switching with proper assembly implementation
+- Round-robin scheduler integrated with timer interrupt
+- GDT with user mode segments (Ring 3)
+- Syscall dispatcher (int 0x80) with 6 core syscalls
+- Just need: User stack setup + iretq transition!
 
-This is solid progress! The kernel has reached the critical milestone where it can manage hardware. Now it's time to bring it to life with multitasking and userspace.
+The kernel has reached the critical milestone where it can manage hardware AND processes. We're just 2 tasks away from running userspace code!
 
 ---
 
@@ -128,11 +155,17 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - `fork()` - create child process (stub, returns NotImplemented)
   - `exec(path)` - replace process with new program (stub, returns NotImplemented)
 - [ ] User stack setup (separate from kernel stack)
-  - TSS RSP0 field ready for kernel stack pointer
-  - Need to implement process creation with user stack allocation
+  - Allocate user-mode stack in high memory (e.g., 0x7fff_ffff_f000)
+  - Set TSS RSP0 to kernel stack for syscall entry
+  - Map user stack in page tables with U/S=1 (user accessible)
 - [ ] Return to userspace (iretq with correct stack frame)
-  - Infrastructure ready (user segments, TSS, syscall handler)
-  - Need to implement actual transition from kernel to user mode
+  - Push SS, RSP, RFLAGS, CS, RIP for iretq
+  - Set user segments (ds, es, fs, gs)
+  - Execute iretq to jump to Ring 3
+- [ ] First userspace test program (embedded in kernel)
+  - Simple "hello world" that calls sys_write
+  - Infinite loop or sys_exit to test termination
+  - Validates full kernel→user→kernel transition
 
 ## Phase 6: Virtual Filesystem (VFS)
 **Goal**: Unified file interface for RAM, disk, and devices
@@ -1100,6 +1133,235 @@ This is solid progress! The kernel has reached the critical milestone where it c
   - Latency compensation
   - Anti-cheat mechanisms
 
+## Phase 36: Advanced Debugging & Diagnostics
+**Goal**: World-class debugging and introspection tools
+
+- [ ] Core dump generation and analysis
+  - Capture full process state on crash
+  - Minidump format support
+  - Automatic backtrace generation
+  - Register and memory inspection
+- [ ] Kernel debugger (KDB-style)
+  - Break into debugger on panic
+  - Inspect kernel state
+  - Step through kernel code
+  - Hardware breakpoint support
+- [ ] Memory sanitizer (AddressSanitizer-like)
+  - Detect buffer overflows
+  - Use-after-free detection
+  - Memory leak detection
+  - Shadow memory implementation
+- [ ] Thread sanitizer (detect data races)
+  - Race condition detection
+  - Lock order validation
+  - Deadlock detection
+  - Lockdep implementation
+- [ ] System call tracer (strace-like)
+  - Trace all syscalls for a process
+  - Timestamp and duration
+  - Argument and return value logging
+  - Filter by syscall type
+- [ ] Fuzzing infrastructure
+  - Syscall fuzzer for kernel
+  - File format fuzzers
+  - Network protocol fuzzers
+  - Coverage-guided fuzzing
+- [ ] Live process inspection
+  - Attach to running process
+  - Modify variables on-the-fly
+  - Hot-patch functions
+  - Memory map visualization
+
+## Phase 37: Advanced Storage & Data Management
+**Goal**: Enterprise-grade storage features
+
+- [ ] Logical Volume Manager (LVM-like)
+  - Volume groups and logical volumes
+  - Dynamic volume resizing
+  - Snapshots at volume level
+  - Striping and mirroring
+- [ ] Storage tiering
+  - Hot/warm/cold data classification
+  - Automatic data migration
+  - SSD caching for HDD
+  - Compression for cold data
+- [ ] Object storage system
+  - S3-compatible API
+  - Content-addressed storage
+  - Erasure coding for redundancy
+  - Multi-region replication
+- [ ] Distributed block storage
+  - Network-attached block devices
+  - Replication across nodes
+  - Automatic failover
+  - iSCSI protocol support
+- [ ] Time-series database
+  - Optimized for metrics data
+  - Downsampling and retention policies
+  - Continuous queries
+  - Grafana-compatible query API
+- [ ] In-memory database
+  - Redis-like key-value store
+  - Persistence via snapshots or AOF
+  - Pub/sub messaging
+  - Data structure commands (lists, sets, sorted sets)
+
+## Phase 38: Power Management & Green Computing
+**Goal**: Optimize for energy efficiency and battery life
+
+- [ ] Dynamic Voltage and Frequency Scaling (DVFS)
+  - CPU frequency scaling based on load
+  - Per-core frequency management
+  - Governor policies (performance, powersave, ondemand)
+  - Integration with scheduler
+- [ ] Sleep states (S3, S4, S5)
+  - Suspend to RAM (S3)
+  - Hibernate to disk (S4)
+  - Device power state management
+  - Wake sources configuration
+- [ ] Runtime power management
+  - Device runtime suspend
+  - Aggressive link power management
+  - PCIe ASPM (Active State Power Management)
+  - USB selective suspend
+- [ ] Battery management
+  - Capacity monitoring
+  - Charge/discharge rate tracking
+  - Time-to-empty estimation
+  - Critical battery actions
+- [ ] Thermal management
+  - Temperature monitoring
+  - Thermal zone policies
+  - Active cooling control (fan speed)
+  - Passive cooling (throttling)
+- [ ] Power usage profiling
+  - Per-process power consumption
+  - Per-device power stats
+  - Battery life estimation
+  - Power-hungry process identification
+- [ ] Green scheduling
+  - Pack tasks onto fewer cores
+  - Core parking (idle cores to deep C-states)
+  - Race-to-idle optimization
+  - Energy-aware load balancing
+
+## Phase 39: Security Hardening & Sandboxing
+**Goal**: Defense-in-depth security architecture
+
+- [ ] Secure boot implementation
+  - UEFI Secure Boot support
+  - Verify bootloader signature
+  - Kernel signature verification
+  - Chain of trust from firmware to userspace
+- [ ] Kernel Address Space Layout Randomization (KASLR)
+  - Randomize kernel base address
+  - Randomize module load addresses
+  - Prevents ROP attacks
+  - Stack canaries
+- [ ] Process sandboxing (seccomp-like)
+  - Whitelist allowed syscalls
+  - Syscall filtering per process
+  - Argument validation
+  - Prevent privilege escalation
+- [ ] Mandatory Access Control (MAC)
+  - SELinux-like policy engine
+  - Label-based security
+  - Type enforcement
+  - Role-based access control
+- [ ] Kernel exploit mitigations
+  - SMEP (Supervisor Mode Execution Prevention)
+  - SMAP (Supervisor Mode Access Prevention)
+  - Control-Flow Integrity (CFI)
+  - Return-Oriented Programming (ROP) defenses
+- [ ] Encrypted execution
+  - Encrypted swap space
+  - Secure memory wiping
+  - Memory encryption (AMD SME/SEV)
+  - Intel SGX enclave support
+- [ ] Audit logging
+  - Comprehensive security event logging
+  - Tamper-evident logs
+  - Compliance reporting (HIPAA, PCI-DSS)
+  - Log forwarding to SIEM
+
+## Phase 40: Modern Web & Cloud-Native Features
+**Goal**: First-class cloud and web ecosystem support
+
+- [ ] gRPC implementation
+  - HTTP/2 protocol support
+  - Protocol Buffer serialization
+  - Streaming RPCs
+  - Service mesh integration
+- [ ] GraphQL query engine
+  - Schema definition language
+  - Query parser and executor
+  - Subscriptions via WebSocket
+  - Federation support
+- [ ] Serverless runtime
+  - Function-as-a-Service (FaaS) platform
+  - Cold start optimization
+  - Auto-scaling based on load
+  - Event-driven architecture
+- [ ] Service mesh data plane
+  - Sidecar proxy implementation
+  - Traffic routing and shaping
+  - Circuit breaking
+  - Retry and timeout policies
+- [ ] Container registry
+  - OCI-compliant image storage
+  - Image signing and verification
+  - Vulnerability scanning
+  - Garbage collection
+- [ ] Kubernetes integration
+  - CRI (Container Runtime Interface)
+  - CNI (Container Network Interface)
+  - CSI (Container Storage Interface)
+  - Custom resource definitions
+- [ ] Prometheus integration
+  - Metrics exposition
+  - Service discovery
+  - Alerting rules
+  - Remote write/read
+
+## Phase 41: Robotics & Automation
+**Goal**: RustOS as a robotics platform (ROS-like)
+
+- [ ] Robot Operating System (ROS) compatibility layer
+  - Node graph for distributed computation
+  - Topic-based pub/sub messaging
+  - Service calls and actions
+  - Transform trees (tf2)
+- [ ] Motion planning
+  - Path planning algorithms (A*, RRT)
+  - Trajectory generation
+  - Obstacle avoidance
+  - Inverse kinematics
+- [ ] Sensor fusion
+  - IMU integration
+  - Kalman filtering
+  - Sensor calibration
+  - Multi-sensor localization
+- [ ] Computer vision pipeline
+  - Camera drivers (USB, CSI)
+  - Image processing (OpenCV-like)
+  - Object detection and tracking
+  - Visual SLAM
+- [ ] Motor control
+  - PWM generation
+  - PID controllers
+  - Servo and stepper motor drivers
+  - Brushless motor control (ESC)
+- [ ] Robot simulation
+  - Physics simulation (Gazebo-like)
+  - 3D visualization
+  - Sensor simulation
+  - Hardware-in-the-loop testing
+- [ ] Autonomous navigation
+  - SLAM (Simultaneous Localization and Mapping)
+  - Global and local planners
+  - Costmap generation
+  - Dynamic window approach
+
 ---
 
 ## 🎬 Impressive Demo Ideas
@@ -1144,7 +1406,7 @@ These are concrete demonstrations that would showcase RustOS capabilities:
 - Retro arcade cabinet UI with game selection
 - Speedrun timer and achievement tracking
 
-**Research & Innovation Demos (Phases 21-35)**:
+**Research & Innovation Demos (Phases 21-41)**:
 - Distributed raytracer across cluster of RustOS nodes
 - Live kernel patching without reboot
 - Time-travel debugging of userspace program
@@ -1160,6 +1422,16 @@ These are concrete demonstrations that would showcase RustOS capabilities:
 - Real-time collaborative code editing with video chat
 - Quantum computing simulation with visualization
 - Neuromorphic computing demo for pattern recognition
+- **Memory sanitizer catching buffer overflow in real-time**
+- **Kernel debugger breaking on panic with full backtrace**
+- **LVM snapshot and rollback of root filesystem**
+- **Power management: Suspend to RAM and resume in <2 seconds**
+- **Secure boot chain verification from UEFI to userspace**
+- **gRPC service mesh with automatic load balancing**
+- **Serverless function cold-starting in <10ms**
+- **Robot autonomously navigating room with SLAM**
+- **Computer vision: Real-time object detection with webcam**
+- **Multi-robot coordination with distributed ROS nodes**
 
 **Ultimate Demo** (The "Wow" Factor):
 Build a complete demo environment that showcases the full power of RustOS:
@@ -1203,18 +1475,23 @@ Build a complete demo environment that showcases the full power of RustOS:
 
 ## 🎯 Immediate Priorities (Next 10 Tasks)
 
-1. **Fix context switching** - The current assembly in src/process.rs has issues. Use naked functions or separate .asm files.
-2. **Timer-based preemptive multitasking** - Hook scheduler into PIT interrupt for automatic task switching.
-3. **Kernel thread spawning** - Create API to spawn simple kernel tasks for testing.
-4. **Process termination and cleanup** - Implement exit() and zombie reaping so processes can finish cleanly.
-5. **Ring 3 user mode** - Update GDT and implement privilege switching so we can run userspace code.
-6. **Syscall interface** - Implement int 0x80 handler and dispatch table.
-7. **Basic syscalls: write/read/exit/getpid** - Core syscalls needed for any program.
-8. **User stack setup** - Separate kernel/user stacks with proper privilege levels.
-9. **VFS layer foundation** - Inode abstraction and file operations structure.
-10. **tmpfs implementation** - In-memory filesystem to test VFS without disk complexity.
+**Phase 5 Completion - The Last Mile to Userspace!**
+1. **User stack setup** - Allocate and map user stack, set TSS RSP0 correctly.
+2. **Return to userspace** - Implement iretq transition from kernel to Ring 3.
+3. **First userspace test program** - Embedded "hello world" to validate full transition.
 
-Once these are done, RustOS will run multitasking userspace programs with file I/O! That's the critical milestone that unlocks everything else.
+**Phase 6 - Virtual Filesystem Foundation**
+4. **VFS layer foundation** - Inode abstraction and file operations structure.
+5. **File descriptor table** - Per-process FD table with stdin/stdout/stderr.
+6. **tmpfs basic structure** - In-memory filesystem scaffolding.
+7. **tmpfs read/write** - Implement file operations for in-memory files.
+8. **devfs foundation** - /dev/null, /dev/zero device nodes.
+
+**Phase 7 - First Real Programs**
+9. **ELF parser** - Parse ELF headers and extract program segments.
+10. **Static binary loader** - Load ELF into memory and jump to entry point.
+
+Once tasks 1-3 are done, RustOS will run userspace code! Tasks 4-10 enable real programs with file I/O. That's the critical path to an interactive system.
 
 ---
 
@@ -1235,11 +1512,11 @@ RUSTFLAGS="-D warnings" cargo build --release
 5. Commit after each working feature
 
 ## Current Status
-**Phase**: 4 - Process Management (multitasking foundation)
-**Next Task**: Fix context switching assembly code
+**Phase**: 5 - System Calls & User Mode (92% complete!)
+**Next Task**: User stack setup (separate from kernel stack)
 **Lines of Code**: 3,116 lines of pure Rust kernel code!
-**Completed Sessions**: 10 sessions, 22 tasks done
-**Total Roadmap**: 270+ tasks across 35 phases! 🚀
+**Completed Sessions**: 20 sessions, 30 tasks done
+**Total Roadmap**: 330+ tasks across 41 phases! 🚀
 
 **The Vision is Expanding**:
 - **Short term** (Weeks 1-4): Functional shell with file I/O and multitasking
@@ -1262,15 +1539,29 @@ RUSTFLAGS="-D warnings" cargo build --release
 11. **"Language Lab"** - JIT compiler and custom language implementation (Phase 33)
 12. **"Hardware Wizard"** - Boot on ARM/RISC-V and interface with FPGAs (Phase 34)
 13. **"Social Hub"** - Real-time collaboration and video chat (Phase 35)
-14. **"Research Showcase"** - Novel OS features published (Phase 30)
+14. **"Bug Slayer"** - Memory sanitizer catches overflow in real-time (Phase 36)
+15. **"Data Master"** - S3-compatible object storage serving files (Phase 37)
+16. **"Green Machine"** - Laptop suspends/resumes, battery lasts hours (Phase 38)
+17. **"Fort Knox"** - Secure boot, KASLR, and MAC policies active (Phase 39)
+18. **"Cloud Commander"** - gRPC services in Kubernetes cluster (Phase 40)
+19. **"Robot Overlord"** - Autonomous robot navigating with SLAM (Phase 41)
+20. **"Research Showcase"** - Novel OS features published (Phase 30)
 
 **Why This Matters**:
 RustOS is proving that Rust is an excellent choice for OS development. Memory safety without garbage collection, zero-cost abstractions, and fearless concurrency make it possible to build a sophisticated kernel that's both safe and performant. Every feature we add demonstrates another aspect of systems programming in Rust.
 
 **The Expanding Roadmap**:
-With 270+ tasks across 35 phases, RustOS has evolved from a simple hobby kernel into an wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to social collaboration - RustOS aims to showcase the full spectrum of operating systems development and beyond!
+With 330+ tasks across 41 phases, RustOS has evolved from a simple hobby kernel into a wildly ambitious research and entertainment platform. We're not just building an OS - we're exploring what's possible when you combine modern language safety with cutting-edge systems design. From basic multitasking to distributed computing, from simple graphics to 3D gaming, from single-core to quantum interfaces, from local filesystems to robotics platforms - RustOS aims to showcase the full spectrum of operating systems development and beyond!
 
-**New Frontiers Added**:
+**Recent Frontiers Added (Planning Session 21)**:
+- **Phase 36**: Advanced debugging & diagnostics - core dumps, kernel debugger, sanitizers, fuzzing
+- **Phase 37**: Advanced storage & data management - LVM, object storage, time-series DB, in-memory DB
+- **Phase 38**: Power management & green computing - DVFS, sleep states, thermal management, battery optimization
+- **Phase 39**: Security hardening & sandboxing - secure boot, KASLR, MAC, kernel exploit mitigations
+- **Phase 40**: Modern web & cloud-native - gRPC, GraphQL, serverless, service mesh, Kubernetes integration
+- **Phase 41**: Robotics & automation - ROS compatibility, motion planning, sensor fusion, autonomous navigation
+
+**Previously Added Phases**:
 - **Phase 31**: Developer tooling - debuggers, profilers, REPLs, LSP
 - **Phase 32**: Gaming & entertainment - 2D engine, emulators, physics, game controllers
 - **Phase 33**: Compiler innovation - JIT compilation, custom languages, effect systems
