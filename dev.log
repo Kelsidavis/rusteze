@@ -615,3 +615,6 @@
 [2026-01-19 00:34:26] [INFO] Aider exited with code 0
 [2026-01-19 00:34:26] [INFO] Testing 3 uncommitted files
 [2026-01-19 00:34:26] [INFO] Uncommitted changes compile, auto-committing
+[2026-01-19 01:15:58] [INFO] Periodic sanity check at session 5
+[2026-01-19 01:15:58] [WARN] Sanity check failed, calling haiku
+[2026-01-19 01:17:00] [INFO] Haiku fixed the build
