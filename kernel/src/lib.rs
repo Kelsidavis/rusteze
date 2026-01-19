@@ -215,7 +215,7 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     println!("RustOS booting...");
     
     serial_println!("Serial port initialized successfully");
-    serial_println!("Testing dual output: VGA + COM1");
+    serial_println!("Dual output: VGA + COM1");
 
     // Initialize the PIT timer interrupt at 100Hz
     pit::init_pit();
@@ -395,4 +395,3 @@ fn panic(info: &PanicInfo) -> ! {
         core::hint::spin_loop();
     }
 }
-```
