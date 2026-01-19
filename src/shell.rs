@@ -84,6 +84,7 @@ impl Shell {
             "clear" | "cls" => self.cmd_clear(),
             "exit" => self.cmd_exit(),
             "help" => self.cmd_help(),
+            "ps" => self.cmd_ps(),
             _ => {
                 crate::println!("Command not found: {}", cmd);
                 Err("command not found")
@@ -160,7 +161,29 @@ impl Shell {
         crate::println!("  unset VAR        - Remove environment variable");
         crate::println!("  clear/cls        - Clear the screen");
         crate::println!("  help             - Show this help message");
+        crate::println!("  ps               - List running processes");
         crate::println!("  exit             - Exit the shell");
+        Ok(())
+    }
+
+    /// Process list command - show running processes
+    fn cmd_ps(&mut self) -> Result<(), &'static str> {
+        use crate::process::PROCESS_MANAGER;
+
+        let pm = PROCESS_MANAGER.lock();
+        let count = pm.process_count();
+
+        crate::println!("PID   STATE    NAME");
+        crate::println!("---   -----    ----");
+        crate::println!("  0   Running  idle");
+
+        if count > 1 {
+            crate::println!("(Additional {} process(es) in queue)", count - 1);
+        }
+
+        crate::println!();
+        crate::println!("Total: {} process(es)", count);
+
         Ok(())
     }
 }
