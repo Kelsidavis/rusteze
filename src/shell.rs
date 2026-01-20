@@ -116,6 +116,11 @@ pub struct Shell {
     jobs: Vec<Job>,
     /// Next job ID
     next_job_id: usize,
+    /// Aliases (command shortcuts)
+    aliases: BTreeMap<String, String>,
+    /// Signal flags
+    interrupt_requested: bool,
+    suspend_requested: bool,
 }
 
 impl Shell {
@@ -131,7 +136,36 @@ impl Shell {
             cursor_pos: 0,
             jobs: Vec::new(),
             next_job_id: 1,
+            aliases: BTreeMap::new(),
+            interrupt_requested: false,
+            suspend_requested: false,
         }
+    }
+
+    /// Check and clear interrupt flag (Ctrl+C)
+    pub fn check_interrupt(&mut self) -> bool {
+        let was_interrupted = self.interrupt_requested;
+        self.interrupt_requested = false;
+        was_interrupted
+    }
+
+    /// Check and clear suspend flag (Ctrl+Z)
+    pub fn check_suspend(&mut self) -> bool {
+        let was_suspended = self.suspend_requested;
+        self.suspend_requested = false;
+        was_suspended
+    }
+
+    /// Request interrupt (called by keyboard handler when Ctrl+C is pressed)
+    #[allow(dead_code)]
+    pub fn request_interrupt(&mut self) {
+        self.interrupt_requested = true;
+    }
+
+    /// Request suspend (called by keyboard handler when Ctrl+Z is pressed)
+    #[allow(dead_code)]
+    pub fn request_suspend(&mut self) {
+        self.suspend_requested = true;
     }
 
     /// Add command to history
@@ -299,8 +333,9 @@ impl Shell {
     #[allow(dead_code)]
     fn complete_command(&self, prefix: &str) -> Option<Vec<String>> {
         let commands = [
-            "cat", "cd", "clear/cls", "echo", "export", "help",
-            "ls", "mkdir", "ps", "pwd", "reboot", "rm", "unset",
+            "alias", "bg", "cat", "cd", "clear/cls", "echo", "export",
+            "fg", "help", "jobs", "ls", "mkdir", "ps", "pwd", "reboot",
+            "rm", "source", "unalias", "unset",
         ];
 
         let matches: Vec<String> = commands
@@ -364,6 +399,29 @@ impl Shell {
         self.cursor_pos = last_space + completion.len();
     }
 
+    /// Expand aliases in command line
+    fn expand_aliases(&self, line: &str) -> String {
+        // Extract the first word (command name)
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.is_empty() {
+            return line.to_string();
+        }
+
+        let cmd = parts[0];
+
+        // Check if it's an alias
+        if let Some(expansion) = self.aliases.get(cmd) {
+            // Replace the command with its expansion
+            if parts.len() > 1 {
+                format!("{} {}", expansion, &line[cmd.len()..].trim_start())
+            } else {
+                expansion.clone()
+            }
+        } else {
+            line.to_string()
+        }
+    }
+
     /// Parse and execute a command line
     pub fn execute_line(&mut self, line: &str) -> Result<(), &'static str> {
         let line = line.trim();
@@ -373,9 +431,20 @@ impl Shell {
             return Ok(());
         }
 
+        // Check for signal requests before executing
+        if self.check_interrupt() {
+            crate::println!("^C");
+            return Ok(());
+        }
+
+        // Expand aliases
+        let expanded_line = self.expand_aliases(line);
+        let line = expanded_line.as_str();
+
         // Check for background process (&)
         let (line, is_background) = if line.ends_with('&') {
-            (line[..line.len() - 1].trim(), true)
+            let trimmed = line[..line.len() - 1].trim();
+            (trimmed, true)
         } else {
             (line, false)
         };
@@ -728,6 +797,13 @@ impl Shell {
 
     /// Execute a single command with arguments
     fn execute_command(&mut self, cmd: &str, args: &[&str]) -> Result<(), &'static str> {
+        // Check for suspend request during command execution
+        if self.check_suspend() {
+            crate::println!("^Z");
+            crate::println!("Note: Job control requires process/threading support");
+            return Ok(());
+        }
+
         match cmd {
             "echo" => self.cmd_echo(args),
             "export" => self.cmd_export(args),
@@ -745,6 +821,9 @@ impl Shell {
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
             "bg" => self.cmd_bg(args),
+            "alias" => self.cmd_alias(args),
+            "unalias" => self.cmd_unalias(args),
+            "source" => self.cmd_source(args),
             _ => {
                 crate::println!("Command not found: {}", cmd);
                 Err("command not found")
@@ -826,12 +905,20 @@ impl Shell {
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
         crate::println!("  bg [job_id]      - Resume job in background");
+        crate::println!("  alias [name=cmd] - Create or list command aliases");
+        crate::println!("  unalias <name>   - Remove alias");
+        crate::println!("  source <file>    - Execute shell script");
         crate::println!("");
         crate::println!("Advanced Features:");
         crate::println!("  cmd1 | cmd2      - Pipe output (ls | grep pattern)");
         crate::println!("  cmd > file       - Redirect output to file");
         crate::println!("  cmd >> file      - Append output to file");
         crate::println!("  cmd &            - Run command in background");
+        crate::println!("");
+        crate::println!("Signal Handling:");
+        crate::println!("  Ctrl+C           - Interrupt current command");
+        crate::println!("  Ctrl+Z           - Suspend current command");
+        crate::println!("  (Note: Signals require keyboard integration)");
         Ok(())
     }
 
@@ -1140,6 +1227,127 @@ impl Shell {
             None => {
                 crate::println!("bg: job {} not found", job_id);
                 Err("job not found")
+            }
+        }
+    }
+
+    /// Alias command - create or list aliases
+    fn cmd_alias(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            // List all aliases
+            if self.aliases.is_empty() {
+                crate::println!("No aliases defined");
+            } else {
+                crate::println!("Aliases:");
+                for (name, expansion) in &self.aliases {
+                    crate::println!("  alias {}='{}'", name, expansion);
+                }
+            }
+            Ok(())
+        } else {
+            // Define new aliases
+            for arg in args {
+                if let Some((name, expansion)) = arg.split_once('=') {
+                    // Remove quotes if present
+                    let expansion = expansion.trim_matches(|c| c == '\'' || c == '"');
+                    self.aliases.insert(name.to_string(), expansion.to_string());
+                    crate::println!("Alias created: {} -> {}", name, expansion);
+                } else {
+                    // Show specific alias
+                    if let Some(expansion) = self.aliases.get(*arg) {
+                        crate::println!("alias {}='{}'", arg, expansion);
+                    } else {
+                        crate::println!("alias: {}: not found", arg);
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    /// Unalias command - remove aliases
+    fn cmd_unalias(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: unalias <name>");
+            return Err("missing alias name");
+        }
+
+        for arg in args {
+            if self.aliases.remove(*arg).is_some() {
+                crate::println!("Removed alias: {}", arg);
+            } else {
+                crate::println!("unalias: {}: not found", arg);
+            }
+        }
+        Ok(())
+    }
+
+    /// Source command - execute shell script from file
+    fn cmd_source(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: source <script.sh>");
+            return Err("missing script file");
+        }
+
+        let script_path = self.resolve_path(args[0]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Read the script file
+        match tmpfs.resolve_path(&script_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("source: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+
+                // Read entire file into buffer
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("source: read error: {}", e);
+                            return Err("read error");
+                        }
+                    }
+                }
+
+                // Release the tmpfs lock before executing commands
+                drop(tmpfs);
+
+                // Parse and execute each line
+                if let Ok(script_text) = core::str::from_utf8(&content) {
+                    for line in script_text.lines() {
+                        let line = line.trim();
+
+                        // Skip empty lines and comments
+                        if line.is_empty() || line.starts_with('#') {
+                            continue;
+                        }
+
+                        // Execute the line
+                        if let Err(e) = self.execute_line(line) {
+                            crate::println!("source: error executing '{}': {}", line, e);
+                            return Err("script execution error");
+                        }
+                    }
+                    crate::println!("Script executed: {}", args[0]);
+                    Ok(())
+                } else {
+                    crate::println!("source: {}: Binary file or invalid encoding", args[0]);
+                    Err("invalid file encoding")
+                }
+            }
+            Err(e) => {
+                crate::println!("source: {}: {}", args[0], e);
+                Err("file not found")
             }
         }
     }

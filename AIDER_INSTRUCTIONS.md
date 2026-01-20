@@ -340,9 +340,9 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - fg [job_id] brings job to foreground
   - bg [job_id] resumes stopped job in background
   - Job state tracking (Running, Stopped, Done)
-- [ ] Signal handling (Ctrl+C, Ctrl+Z)
-- [ ] Shell scripting (.sh file execution)
-- [ ] Aliases (command shortcuts)
+- [x] Signal handling (Ctrl+C, Ctrl+Z)
+- [x] Shell scripting (.sh file execution)
+- [x] Aliases (command shortcuts)
 - [ ] Command substitution ($(cmd) or `cmd`)
 - [ ] Here documents (<<EOF syntax)
 - [ ] Process substitution (<(cmd) syntax)
