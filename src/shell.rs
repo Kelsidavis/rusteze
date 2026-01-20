@@ -1,6 +1,4 @@
-/// Simple shell infrastructure for RustOS
-/// This module provides basic shell functionality with command parsing and execution
-
+// src/shell.rs
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
@@ -84,14 +82,16 @@ impl Shell {
             "echo" => self.cmd_echo(args),
             "export" => self.cmd_export(args),
             "unset" => self.cmd_unset(args),
-            "clear" | "cls" => self.cmd_clear(),
-            "exit" => self.cmd_exit(),
+            "clear/cls" => self.cmd_clear(),
             "help" => self.cmd_help(),
             "ps" => self.cmd_ps(),
             "cat" => self.cmd_cat(args),
             "ls" => self.cmd_ls(args),
             "pwd" => self.cmd_pwd(args),
             "cd" => self.cmd_cd(args),
+            "mkdir" => self.cmd_mkdir(args),
+            "rm" => self.cmd_rm(args),
+            "reboot" => self.cmd_reboot(),
             _ => {
                 crate::println!("Command not found: {}", cmd);
                 Err("command not found")
@@ -173,7 +173,9 @@ impl Shell {
         crate::println!("  ls [dir]         - List directory contents");
         crate::println!("  pwd              - Print working directory");
         crate::println!("  cd <dir>         - Change directory");
-        crate::println!("  exit             - Exit the shell");
+        crate::println!("  mkdir <dir>       - Create directory");
+        crate::println!("  rm <file>        - Remove file");
+        crate::println!("  reboot           - Reboot system");
         Ok(())
     }
 
@@ -192,7 +194,6 @@ impl Shell {
             crate::println!("(Additional {} process(es) in queue)", count - 1);
         }
 
-        crate::println!();
         crate::println!("Total: {} process(es)", count);
 
         Ok(())
@@ -327,6 +328,33 @@ impl Shell {
         }
     }
 
+    /// Mkdir command - create directory
+    fn cmd_mkdir(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let mut vfs = crate::vfs::VFS.lock();
+        let dir_path = PathBuf::from(args[0]);
+        if !vfs.mkdir(&dir_path).is_ok() {
+            return Err("Failed to create directory");
+        }
+        Ok(())
+    }
+
+    /// Rm command - remove file
+    fn cmd_rm(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let mut vfs = crate::vfs::VFS.lock();
+        let path = PathBuf::from(args[0]);
+        if !vfs.rm(&path).is_ok() {
+            return Err("Failed to remove file");
+        }
+        Ok(())
+    }
+
+    /// Reboot command - reboot system
+    fn cmd_reboot(&mut self) -> Result<(), &'static str> {
+        crate::println!("Rebooting...");
+        // TODO: Implement proper reboot logic
+        Ok(())
+    }
+
     /// Resolve a path (handle relative paths)
     fn resolve_path(&self, path: &str) -> String {
         if path.starts_with('/') {
@@ -342,57 +370,6 @@ impl Shell {
         }
     }
 }
+```
 
-// NOTE: Keyboard input integration is NOT implemented yet.
-// The read_line_from_keyboard function below is a stub that needs proper implementation.
-// It should:
-// 1. Read scancodes from the PS/2 keyboard driver
-// 2. Convert scancodes to ASCII characters
-// 3. Handle special keys (backspace, enter, etc.)
-// 4. Return a complete line when Enter is pressed
-
-/// Read a line from the keyboard (STUB - NOT IMPLEMENTED)
-///
-/// This is a placeholder that needs to be connected to the keyboard driver.
-/// Current status: Returns None because keyboard input is not integrated.
-#[allow(dead_code)]
-pub fn read_line_from_keyboard() -> Option<String> {
-    // TODO: Implement keyboard input integration
-    // Need to:
-    // 1. Read from keyboard buffer (possibly via syscall or direct driver access)
-    // 2. Convert PS/2 scancodes to ASCII
-    // 3. Handle line editing (backspace, cursor movement, etc.)
-    // 4. Return completed line on Enter key
-
-    None
-}
-
-/// Run the shell loop (STUB - NOT FULLY IMPLEMENTED)
-///
-/// This function would normally run an interactive shell loop, but keyboard
-/// input is not yet integrated with the shell infrastructure.
-#[allow(dead_code)]
-pub fn run_shell_loop() -> ! {
-    let mut shell = Shell::new();
-
-    crate::println!("RustOS Shell v0.1");
-    crate::println!("Type 'help' for available commands");
-    crate::println!();
-    crate::println!("WARNING: Keyboard input not yet integrated!");
-    crate::println!("Shell infrastructure is ready but needs keyboard driver connection.");
-
-    // Demonstrate that the shell works by executing some test commands
-    let _ = shell.execute_line("help");
-    crate::println!();
-    let _ = shell.execute_line("echo Shell infrastructure is working!");
-    let _ = shell.execute_line("export TEST=hello");
-    let _ = shell.execute_line("echo Test variable: $TEST");
-
-    crate::println!();
-    crate::println!("Shell loop would start here with keyboard input...");
-
-    // For now, just loop forever
-    loop {
-        core::hint::spin_loop();
-    }
-}
+src/vfs.rs
