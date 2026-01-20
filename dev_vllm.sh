@@ -137,18 +137,16 @@ done
 echo "Starting vLLM server..."
 log "INFO" "Starting vLLM server on port 8000"
 
-CUDA_VISIBLE_DEVICES=1 nohup python3 -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=0 nohup python3 -m vllm.entrypoints.openai.api_server \
     --model "$VLLM_MODEL" \
     --host 0.0.0.0 \
     --port 8000 \
     --dtype bfloat16 \
     --max-model-len 32768 \
-    --gpu-memory-utilization 0.85 \
+    --gpu-memory-utilization 0.80 \
     --max-num-seqs 16 \
     --disable-log-requests \
     --trust-remote-code \
-    --enforce-eager \
-    --disable-custom-all-reduce \
     --tensor-parallel-size 1 \
     > vllm.log 2>&1 &
 
