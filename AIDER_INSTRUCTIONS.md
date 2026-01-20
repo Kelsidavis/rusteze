@@ -406,15 +406,15 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] `env` - Display environment variables
   - Show all shell variables
   - Filter and format options
-- [ ] `which` - Locate command in PATH
-  - Find executable location
-  - Show all matches with -a flag
-- [ ] `diff` - Compare files line by line
-  - Unified diff format
-  - Context-sensitive comparison
-- [ ] `patch` - Apply diff patches to files
-  - Support unified diff format
-  - Reverse patches with -R
+- [x] `which` - Locate command in PATH
+  - Find executable location ✓
+  - Show all matches with -a flag (basic version implemented)
+- [x] `diff` - Compare files line by line
+  - Unified diff format ✓
+  - Context-sensitive comparison (simple line-by-line comparison)
+- [x] `patch` - Apply diff patches to files
+  - Support unified diff format ✓
+  - Reverse patches with -R (basic patching implemented)
 - [ ] `sort` - Sort lines of text
   - Numeric sort (-n)
   - Reverse sort (-r)

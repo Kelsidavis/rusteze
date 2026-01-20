@@ -1375,6 +1375,9 @@ impl Shell {
             "uptime" => self.cmd_uptime(args),
             "free" => self.cmd_free(args),
             "env" => self.cmd_env(args),
+            "which" => self.cmd_which(args),
+            "diff" => self.cmd_diff(args),
+            "patch" => self.cmd_patch(args),
             "reboot" => self.cmd_reboot(),
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
@@ -1470,6 +1473,9 @@ impl Shell {
         crate::println!("  uptime           - Show system uptime");
         crate::println!("  free             - Display memory information");
         crate::println!("  env              - Display environment variables");
+        crate::println!("  which <cmd>      - Locate command in PATH");
+        crate::println!("  diff <f1> <f2>   - Compare files line by line");
+        crate::println!("  patch <f> <p>    - Apply diff patch to file");
         crate::println!("  reboot           - Reboot system");
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
@@ -2566,6 +2572,373 @@ impl Shell {
             crate::println!("{}={}", key, value);
         }
         Ok(())
+    }
+
+    /// Which command - locate command in PATH
+    fn cmd_which(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: which <command>");
+            return Err("missing command argument");
+        }
+
+        let command = args[0];
+
+        // Check if it's a builtin command first
+        let builtins = [
+            "echo", "export", "unset", "clear", "cls", "help", "ps", "cat", "ls",
+            "pwd", "cd", "mkdir", "rmdir", "rm", "cp", "mv", "touch", "wc", "grep",
+            "head", "tail", "uptime", "free", "env", "which", "diff", "patch",
+            "reboot", "jobs", "fg", "bg", "alias", "unalias", "source",
+        ];
+
+        if builtins.contains(&command) {
+            crate::println!("{}: shell builtin command", command);
+            return Ok(());
+        }
+
+        // Check in PATH directories
+        if let Some(path_var) = self.env.get("PATH") {
+            let paths: Vec<&str> = path_var.split(':').collect();
+            let tmpfs = crate::tmpfs::TMPFS.lock();
+
+            for path_dir in paths {
+                let full_path = if path_dir.ends_with('/') {
+                    format!("{}{}", path_dir, command)
+                } else {
+                    format!("{}/{}", path_dir, command)
+                };
+
+                // Check if file exists
+                if let Ok(inode) = tmpfs.resolve_path(&full_path) {
+                    if inode.file_type() == crate::vfs::FileType::Regular {
+                        crate::println!("{}", full_path);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        crate::println!("{}: command not found", command);
+        Err("command not found")
+    }
+
+    /// Diff command - compare files line by line
+    fn cmd_diff(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.len() < 2 {
+            crate::println!("Usage: diff <file1> <file2>");
+            return Err("missing file arguments");
+        }
+
+        let file1_path = self.resolve_path(args[0]);
+        let file2_path = self.resolve_path(args[1]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Read both files
+        let file1_content = match tmpfs.resolve_path(&file1_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("diff: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break,
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("diff: Failed to read {}: {}", args[0], e);
+                            return Err("read failed");
+                        }
+                    }
+                }
+                content
+            }
+            Err(e) => {
+                crate::println!("diff: {}: {}", args[0], e);
+                return Err("file not found");
+            }
+        };
+
+        let file2_content = match tmpfs.resolve_path(&file2_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("diff: {}: Is a directory", args[1]);
+                    return Err("is a directory");
+                }
+
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break,
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("diff: Failed to read {}: {}", args[1], e);
+                            return Err("read failed");
+                        }
+                    }
+                }
+                content
+            }
+            Err(e) => {
+                crate::println!("diff: {}: {}", args[1], e);
+                return Err("file not found");
+            }
+        };
+
+        // Parse files into lines
+        let file1_text = match core::str::from_utf8(&file1_content) {
+            Ok(text) => text,
+            Err(_) => {
+                crate::println!("diff: {}: Binary file or invalid encoding", args[0]);
+                return Err("invalid encoding");
+            }
+        };
+
+        let file2_text = match core::str::from_utf8(&file2_content) {
+            Ok(text) => text,
+            Err(_) => {
+                crate::println!("diff: {}: Binary file or invalid encoding", args[1]);
+                return Err("invalid encoding");
+            }
+        };
+
+        let lines1: Vec<&str> = file1_text.lines().collect();
+        let lines2: Vec<&str> = file2_text.lines().collect();
+
+        // Simple line-by-line comparison (unified diff format)
+        if lines1 == lines2 {
+            // Files are identical
+            return Ok(());
+        }
+
+        crate::println!("--- {}", args[0]);
+        crate::println!("+++ {}", args[1]);
+
+        // Simple diff output (not a full LCS algorithm, just line-by-line)
+        let max_lines = core::cmp::max(lines1.len(), lines2.len());
+        let mut i = 0;
+
+        while i < max_lines {
+            let line1 = lines1.get(i);
+            let line2 = lines2.get(i);
+
+            match (line1, line2) {
+                (Some(l1), Some(l2)) if l1 == l2 => {
+                    // Lines are the same, no output
+                }
+                (Some(l1), Some(l2)) => {
+                    // Lines differ
+                    crate::println!("@@ -{},1 +{},1 @@", i + 1, i + 1);
+                    crate::println!("-{}", l1);
+                    crate::println!("+{}", l2);
+                }
+                (Some(l1), None) => {
+                    // Line only in file1 (deleted)
+                    crate::println!("@@ -{},1 +{},0 @@", i + 1, i + 1);
+                    crate::println!("-{}", l1);
+                }
+                (None, Some(l2)) => {
+                    // Line only in file2 (added)
+                    crate::println!("@@ -{},0 +{},1 @@", i + 1, i + 1);
+                    crate::println!("+{}", l2);
+                }
+                (None, None) => break,
+            }
+            i += 1;
+        }
+
+        Ok(())
+    }
+
+    /// Patch command - apply diff patches to files
+    fn cmd_patch(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.len() < 2 {
+            crate::println!("Usage: patch <file> <patchfile>");
+            return Err("missing arguments");
+        }
+
+        let file_path = self.resolve_path(args[0]);
+        let patch_path = self.resolve_path(args[1]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Read the original file
+        let original_content = match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("patch: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break,
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("patch: Failed to read {}: {}", args[0], e);
+                            return Err("read failed");
+                        }
+                    }
+                }
+                content
+            }
+            Err(e) => {
+                crate::println!("patch: {}: {}", args[0], e);
+                return Err("file not found");
+            }
+        };
+
+        // Read the patch file
+        let patch_content = match tmpfs.resolve_path(&patch_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("patch: {}: Is a directory", args[1]);
+                    return Err("is a directory");
+                }
+
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break,
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("patch: Failed to read {}: {}", args[1], e);
+                            return Err("read failed");
+                        }
+                    }
+                }
+                content
+            }
+            Err(e) => {
+                crate::println!("patch: {}: {}", args[1], e);
+                return Err("file not found");
+            }
+        };
+
+        // Parse original file into lines
+        let original_text = match core::str::from_utf8(&original_content) {
+            Ok(text) => text,
+            Err(_) => {
+                crate::println!("patch: {}: Binary file or invalid encoding", args[0]);
+                return Err("invalid encoding");
+            }
+        };
+
+        let patch_text = match core::str::from_utf8(&patch_content) {
+            Ok(text) => text,
+            Err(_) => {
+                crate::println!("patch: {}: Binary file or invalid encoding", args[1]);
+                return Err("invalid encoding");
+            }
+        };
+
+        let mut original_lines: Vec<String> = original_text.lines().map(|s| s.to_string()).collect();
+        let patch_lines: Vec<&str> = patch_text.lines().collect();
+
+        // Simple unified diff parser
+        let mut i = 0;
+        let mut patches_applied = 0;
+
+        while i < patch_lines.len() {
+            let line = patch_lines[i];
+
+            if line.starts_with("@@") {
+                // Parse hunk header: @@ -line_num,count +line_num,count @@
+                // For simplicity, we'll just look for the line number after '-'
+                if let Some(header_part) = line.strip_prefix("@@") {
+                    if let Some(minus_part) = header_part.trim().split_whitespace().next() {
+                        if let Some(line_str) = minus_part.strip_prefix('-') {
+                            if let Some(line_num_str) = line_str.split(',').next() {
+                                if let Ok(line_num) = line_num_str.parse::<usize>() {
+                                    // Apply changes for this hunk
+                                    i += 1;
+                                    while i < patch_lines.len() && !patch_lines[i].starts_with("@@") {
+                                        let patch_line = patch_lines[i];
+
+                                        if let Some(removed) = patch_line.strip_prefix('-') {
+                                            // Remove this line
+                                            let idx = line_num - 1;
+                                            if idx < original_lines.len() && original_lines[idx] == removed {
+                                                original_lines.remove(idx);
+                                                patches_applied += 1;
+                                            } else {
+                                                crate::println!("patch: Hunk failed at line {}", line_num);
+                                            }
+                                        } else if let Some(added) = patch_line.strip_prefix('+') {
+                                            // Add this line
+                                            let idx = line_num - 1;
+                                            if idx <= original_lines.len() {
+                                                original_lines.insert(idx, added.to_string());
+                                                patches_applied += 1;
+                                            } else {
+                                                crate::println!("patch: Hunk failed at line {}", line_num);
+                                            }
+                                        }
+
+                                        i += 1;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        if patches_applied == 0 {
+            crate::println!("patch: No patches applied (invalid or empty patch file)");
+            return Err("no patches applied");
+        }
+
+        // Write the patched content back to the file
+        let patched_content = original_lines.join("\n");
+        let patched_bytes = patched_content.as_bytes();
+
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                match inode.write(0, patched_bytes) {
+                    Ok(_) => {
+                        crate::println!("Patched {} ({} changes applied)", args[0], patches_applied);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        crate::println!("patch: Failed to write to {}: {}", args[0], e);
+                        Err("write failed")
+                    }
+                }
+            }
+            Err(e) => {
+                crate::println!("patch: {}: {}", args[0], e);
+                Err("file not found")
+            }
+        }
     }
 
     /// Resolve a path (handle relative paths)
