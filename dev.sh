@@ -327,11 +327,11 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     fi
 
     # 8B model on RTX 5080 - 32k context with q8_0 for full GPU utilization
-    # Context budget: 32k total
-    #   - 8k map tokens (repo structure + file summaries)
-    #   - 8k chat history (conversation memory)
-    #   - ~15k available for actual file content
-    # No file size limits - can read entire large files (500+ lines)
+    # Context budget: 28k max input (set in .aider.model.metadata.json)
+    #   - 2k map tokens (repo structure + file summaries)
+    #   - 4k chat history (conversation memory)
+    #   - ~22k available for actual file content
+    # Can work with 2-3 large files (500+ lines each) simultaneously
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
