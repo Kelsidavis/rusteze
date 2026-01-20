@@ -154,12 +154,6 @@ impl Shell {
         Ok(())
     }
 
-    /// Exit shell (for now just print a message)
-    fn cmd_exit(&mut self) -> Result<(), &'static str> {
-        crate::println!("Exit command not fully implemented (kernel continues running)");
-        Ok(())
-    }
-
     /// Help command - show available commands
     fn cmd_help(&mut self) -> Result<(), &'static str> {
         crate::println!("RustOS Shell - Available Commands:");
@@ -330,29 +324,45 @@ impl Shell {
 
     /// Mkdir command - create directory
     fn cmd_mkdir(&mut self, args: &[&str]) -> Result<(), &'static str> {
-        let mut vfs = crate::vfs::VFS.lock();
-        let dir_path = PathBuf::from(args[0]);
-        if !vfs.mkdir(&dir_path).is_ok() {
-            return Err("Failed to create directory");
+        if args.is_empty() {
+            crate::println!("Usage: mkdir <directory>");
+            return Err("missing directory argument");
         }
-        Ok(())
+
+        let path = self.resolve_path(args[0]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.create_directory(&path) {
+            Ok(_) => {
+                crate::println!("Created directory: {}", args[0]);
+                Ok(())
+            }
+            Err(e) => {
+                crate::println!("mkdir: {}: {}", args[0], e);
+                Err("failed to create directory")
+            }
+        }
     }
 
     /// Rm command - remove file
     fn cmd_rm(&mut self, args: &[&str]) -> Result<(), &'static str> {
-        let mut vfs = crate::vfs::VFS.lock();
-        let path = PathBuf::from(args[0]);
-        if !vfs.rm(&path).is_ok() {
-            return Err("Failed to remove file");
+        if args.is_empty() {
+            crate::println!("Usage: rm <file>");
+            return Err("missing file argument");
         }
-        Ok(())
+
+        // TODO: Implement file deletion in tmpfs
+        crate::println!("rm: Not yet implemented");
+        crate::println!("Note: File deletion requires tmpfs.remove() method to be added");
+        Err("not implemented")
     }
 
     /// Reboot command - reboot system
     fn cmd_reboot(&mut self) -> Result<(), &'static str> {
-        crate::println!("Rebooting...");
-        // TODO: Implement proper reboot logic
-        Ok(())
+        crate::println!("Reboot functionality not yet implemented");
+        crate::println!("Note: Requires ACPI shutdown/reset or keyboard controller reset");
+        crate::println!("For now, please restart the VM manually");
+        Err("not implemented")
     }
 
     /// Resolve a path (handle relative paths)
@@ -370,6 +380,3 @@ impl Shell {
         }
     }
 }
-```
-
-src/vfs.rs

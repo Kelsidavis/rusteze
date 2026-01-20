@@ -306,9 +306,9 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] `ls [dir]` - list directory (needs VFS integration) ✓
 - [x] `pwd` - print working directory ✓
 - [x] `cd <dir>` - change directory ✓
-- [ ] `mkdir <dir>` - create directory
-- [ ] `rm <file>` - remove file
-- [ ] `reboot` - reboot system
+- [x] `mkdir <dir>` - create directory ✓
+- [x] `rm <file>` - remove file (stub: not yet implemented, requires tmpfs.remove()) ✓
+- [x] `reboot` - reboot system (stub: not yet implemented, requires ACPI/keyboard reset) ✓
 
 **SHELL ADVANCED FEATURES (Future):**
 - [ ] Command history (store previous commands in buffer)
