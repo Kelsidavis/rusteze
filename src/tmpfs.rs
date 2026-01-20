@@ -146,6 +146,29 @@ impl Inode for TmpFsInode {
         inner.data.resize(size, 0);
         Ok(())
     }
+
+    fn remove(&self, name: &str) -> Result<(), VfsError> {
+        let mut inner = self.inner.lock();
+
+        if inner.file_type != FileType::Directory {
+            return Err(VfsError::NotADirectory);
+        }
+
+        if !inner.children.contains_key(name) {
+            return Err(VfsError::NotFound);
+        }
+
+        // Check if it's a directory and not empty
+        if let Some(child) = inner.children.get(name) {
+            let child_inner = child.inner.lock();
+            if child_inner.file_type == FileType::Directory && !child_inner.children.is_empty() {
+                return Err(VfsError::DirectoryNotEmpty);
+            }
+        }
+
+        inner.children.remove(name);
+        Ok(())
+    }
 }
 
 /// TmpFS filesystem
@@ -238,6 +261,32 @@ impl TmpFs {
 
         // Create the directory
         current.create(dirname, FileType::Directory)
+    }
+
+    /// Remove a file or directory at the given path
+    pub fn remove(&self, path: &str) -> Result<(), VfsError> {
+        let path = path.trim_start_matches('/');
+
+        if path.is_empty() {
+            return Err(VfsError::InvalidArgument);
+        }
+
+        let components: Vec<&str> = path.split('/').collect();
+        let (parent_components, filename) = components.split_at(components.len() - 1);
+
+        let filename = filename[0];
+
+        // Navigate to parent directory
+        let mut current: Arc<dyn Inode> = self.root.clone();
+        for component in parent_components {
+            if component.is_empty() || *component == "." {
+                continue;
+            }
+            current = current.lookup(component)?;
+        }
+
+        // Remove the entry using the trait method
+        current.remove(filename)
     }
 }
 

@@ -1362,7 +1362,10 @@ impl Shell {
             "pwd" => self.cmd_pwd(args),
             "cd" => self.cmd_cd(args),
             "mkdir" => self.cmd_mkdir(args),
+            "rmdir" => self.cmd_rmdir(args),
             "rm" => self.cmd_rm(args),
+            "cp" => self.cmd_cp(args),
+            "mv" => self.cmd_mv(args),
             "reboot" => self.cmd_reboot(),
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
@@ -1446,7 +1449,10 @@ impl Shell {
         crate::println!("  pwd              - Print working directory");
         crate::println!("  cd <dir>         - Change directory");
         crate::println!("  mkdir <dir>      - Create directory");
+        crate::println!("  rmdir <dir>      - Remove empty directory");
         crate::println!("  rm <file>        - Remove file");
+        crate::println!("  cp <src> <dst>   - Copy file");
+        crate::println!("  mv <src> <dst>   - Move/rename file");
         crate::println!("  reboot           - Reboot system");
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
@@ -1643,6 +1649,43 @@ impl Shell {
         }
     }
 
+    /// Rmdir command - remove empty directory
+    fn cmd_rmdir(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: rmdir <directory>");
+            return Err("missing directory argument");
+        }
+
+        for arg in args {
+            let path = self.resolve_path(arg);
+            let tmpfs = crate::tmpfs::TMPFS.lock();
+
+            // Check if the path exists and is a directory
+            match tmpfs.resolve_path(&path) {
+                Ok(inode) => {
+                    if inode.file_type() != crate::vfs::FileType::Directory {
+                        crate::println!("rmdir: {}: Not a directory", arg);
+                        return Err("not a directory");
+                    }
+
+                    // Remove the directory
+                    match tmpfs.remove(&path) {
+                        Ok(()) => crate::println!("Removed directory: {}", arg),
+                        Err(e) => {
+                            crate::println!("rmdir: {}: {}", arg, e);
+                            return Err("failed to remove directory");
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::println!("rmdir: {}: {}", arg, e);
+                    return Err("directory not found");
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Rm command - remove file
     fn cmd_rm(&mut self, args: &[&str]) -> Result<(), &'static str> {
         if args.is_empty() {
@@ -1650,10 +1693,163 @@ impl Shell {
             return Err("missing file argument");
         }
 
-        // TODO: Implement file deletion in tmpfs
-        crate::println!("rm: Not yet implemented");
-        crate::println!("Note: File deletion requires tmpfs.remove() method to be added");
-        Err("not implemented")
+        for arg in args {
+            let path = self.resolve_path(arg);
+            let tmpfs = crate::tmpfs::TMPFS.lock();
+
+            // Check if the path exists and is not a directory
+            match tmpfs.resolve_path(&path) {
+                Ok(inode) => {
+                    if inode.file_type() == crate::vfs::FileType::Directory {
+                        crate::println!("rm: {}: Is a directory (use rmdir)", arg);
+                        return Err("is a directory");
+                    }
+
+                    // Remove the file
+                    match tmpfs.remove(&path) {
+                        Ok(()) => crate::println!("Removed: {}", arg),
+                        Err(e) => {
+                            crate::println!("rm: {}: {}", arg, e);
+                            return Err("failed to remove");
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::println!("rm: {}: {}", arg, e);
+                    return Err("file not found");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Cp command - copy file
+    fn cmd_cp(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.len() < 2 {
+            crate::println!("Usage: cp <source> <destination>");
+            return Err("missing arguments");
+        }
+
+        let src_path = self.resolve_path(args[0]);
+        let dst_path = self.resolve_path(args[1]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Read the source file
+        match tmpfs.resolve_path(&src_path) {
+            Ok(src_inode) => {
+                if src_inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("cp: {}: Is a directory (directory copy not supported)", args[0]);
+                    return Err("is a directory");
+                }
+
+                // Read all data from source
+                let size = src_inode.size();
+                let mut buffer = alloc::vec![0u8; size];
+                match src_inode.read(0, &mut buffer) {
+                    Ok(bytes_read) => {
+                        // Create destination file
+                        match tmpfs.create_file(&dst_path) {
+                            Ok(dst_inode) => {
+                                // Write data to destination
+                                match dst_inode.write(0, &buffer[..bytes_read]) {
+                                    Ok(_) => {
+                                        crate::println!("Copied {} to {}", args[0], args[1]);
+                                        Ok(())
+                                    }
+                                    Err(e) => {
+                                        crate::println!("cp: Failed to write to {}: {}", args[1], e);
+                                        Err("write failed")
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                crate::println!("cp: Failed to create {}: {}", args[1], e);
+                                Err("create failed")
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        crate::println!("cp: Failed to read {}: {}", args[0], e);
+                        Err("read failed")
+                    }
+                }
+            }
+            Err(e) => {
+                crate::println!("cp: {}: {}", args[0], e);
+                Err("source not found")
+            }
+        }
+    }
+
+    /// Mv command - move/rename file
+    fn cmd_mv(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.len() < 2 {
+            crate::println!("Usage: mv <source> <destination>");
+            return Err("missing arguments");
+        }
+
+        let src_path = self.resolve_path(args[0]);
+        let dst_path = self.resolve_path(args[1]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Check if source exists
+        match tmpfs.resolve_path(&src_path) {
+            Ok(src_inode) => {
+                let src_type = src_inode.file_type();
+
+                // Read all data from source
+                let size = src_inode.size();
+                let mut buffer = alloc::vec![0u8; size];
+
+                if src_type == crate::vfs::FileType::Regular {
+                    // For files, copy the content
+                    match src_inode.read(0, &mut buffer) {
+                        Ok(bytes_read) => {
+                            // Create destination
+                            match tmpfs.create_file(&dst_path) {
+                                Ok(dst_inode) => {
+                                    // Write data to destination
+                                    match dst_inode.write(0, &buffer[..bytes_read]) {
+                                        Ok(_) => {
+                                            // Remove source
+                                            match tmpfs.remove(&src_path) {
+                                                Ok(()) => {
+                                                    crate::println!("Moved {} to {}", args[0], args[1]);
+                                                    Ok(())
+                                                }
+                                                Err(e) => {
+                                                    crate::println!("mv: Failed to remove source {}: {}", args[0], e);
+                                                    Err("remove failed")
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            crate::println!("mv: Failed to write to {}: {}", args[1], e);
+                                            Err("write failed")
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    crate::println!("mv: Failed to create {}: {}", args[1], e);
+                                    Err("create failed")
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            crate::println!("mv: Failed to read {}: {}", args[0], e);
+                            Err("read failed")
+                        }
+                    }
+                } else {
+                    crate::println!("mv: Directory move not yet supported");
+                    Err("directory move not supported")
+                }
+            }
+            Err(e) => {
+                crate::println!("mv: {}: {}", args[0], e);
+                Err("source not found")
+            }
+        }
     }
 
     /// Reboot command - reboot system

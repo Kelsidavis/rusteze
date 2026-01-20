@@ -92,6 +92,10 @@ impl Inode for Mutex<ProcFile> {
     fn truncate(&self, _size: usize) -> Result<(), VfsError> {
         Err(VfsError::PermissionDenied)
     }
+
+    fn remove(&self, _name: &str) -> Result<(), VfsError> {
+        Err(VfsError::NotADirectory)
+    }
 }
 
 /// ProcFS - Process filesystem

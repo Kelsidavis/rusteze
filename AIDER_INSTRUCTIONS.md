@@ -364,19 +364,19 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Human-readable sizes (-h) (TODO)
   - Color output for file types (TODO)
   - Hidden file support (-a) (TODO)
-- [ ] `mkdir` / `rmdir` - Directory management
-  - Create directories with VFS
-  - Remove empty directories
-  - Recursive creation (-p)
-- [ ] `cp` / `mv` - File operations
-  - Copy files through VFS
-  - Move/rename files
-  - Recursive copy for directories (-r)
-- [ ] `rm` - Remove files
-  - Delete files from VFS
-  - Recursive deletion (-r)
-  - Force flag (-f)
-  - Interactive mode (-i)
+- [x] `mkdir` / `rmdir` - Directory management
+  - Create directories with VFS ✓
+  - Remove empty directories ✓
+  - Recursive creation (-p) (TODO)
+- [x] `cp` / `mv` - File operations
+  - Copy files through VFS ✓
+  - Move/rename files ✓
+  - Recursive copy for directories (-r) (TODO)
+- [x] `rm` - Remove files
+  - Delete files from VFS ✓
+  - Recursive deletion (-r) (TODO)
+  - Force flag (-f) (TODO)
+  - Interactive mode (-i) (TODO)
 - [ ] `touch` - Create empty files
   - Create new file if doesn't exist
   - Update timestamps (future)

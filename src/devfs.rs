@@ -101,6 +101,10 @@ impl Inode for Mutex<DeviceNode> {
     fn truncate(&self, _size: usize) -> Result<(), VfsError> {
         Err(VfsError::InvalidOperation)
     }
+
+    fn remove(&self, _name: &str) -> Result<(), VfsError> {
+        Err(VfsError::NotADirectory)
+    }
 }
 
 /// DevFS - Device filesystem

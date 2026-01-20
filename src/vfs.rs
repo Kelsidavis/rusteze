@@ -89,6 +89,9 @@ pub trait Inode: Send + Sync {
 
     /// Truncate the file to the given size
     fn truncate(&self, size: usize) -> Result<(), VfsError>;
+
+    /// Remove a child entry by name (for directories)
+    fn remove(&self, name: &str) -> Result<(), VfsError>;
 }
 
 /// Errors that can occur in the VFS layer
@@ -99,6 +102,7 @@ pub enum VfsError {
     AlreadyExists,
     NotADirectory,
     IsADirectory,
+    DirectoryNotEmpty,
     PermissionDenied,
     InvalidArgument,
     IoError,
@@ -113,6 +117,7 @@ impl fmt::Display for VfsError {
             VfsError::AlreadyExists => write!(f, "File or directory already exists"),
             VfsError::NotADirectory => write!(f, "Not a directory"),
             VfsError::IsADirectory => write!(f, "Is a directory"),
+            VfsError::DirectoryNotEmpty => write!(f, "Directory not empty"),
             VfsError::PermissionDenied => write!(f, "Permission denied"),
             VfsError::InvalidArgument => write!(f, "Invalid argument"),
             VfsError::IoError => write!(f, "I/O error"),
