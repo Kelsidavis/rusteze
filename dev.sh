@@ -110,7 +110,7 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
 export GPU_DEVICE_ORDINAL=1
 export OLLAMA_FLASH_ATTENTION=1
-export OLLAMA_KV_CACHE_TYPE=q4_0
+export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_GPU_LAYERS=999  # Let ollama auto-detect - 8B fits easily in 16GB
 # RTX 5080 16GB can handle 64k context - using all that VRAM!
