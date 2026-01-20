@@ -30,7 +30,9 @@ STAT_COMMITS=0
 # Configuration
 PLANNING_INTERVAL=20  # Run planning session every N sessions
 VLLM_HOST="http://localhost:8000"
-VLLM_MODEL="Qwen/Qwen2.5-Coder-7B-Instruct"
+# Qwen2.5-Coder-14B-Instruct: 2x smarter than 7B, fits in ~7-8GB VRAM
+# Leaves room for ~24k context (shell.rs is 1559 lines = ~12k tokens)
+VLLM_MODEL="Qwen/Qwen2.5-Coder-14B-Instruct"
 
 # Log function
 log() {
@@ -139,11 +141,13 @@ nohup python3 -m vllm.entrypoints.openai.api_server \
     --host 0.0.0.0 \
     --port 8000 \
     --dtype bfloat16 \
-    --max-model-len 32768 \
-    --gpu-memory-utilization 0.95 \
-    --max-num-seqs 16 \
+    --max-model-len 24576 \
+    --gpu-memory-utilization 0.90 \
+    --max-num-seqs 8 \
     --disable-log-requests \
     --trust-remote-code \
+    --enforce-eager \
+    --disable-custom-all-reduce \
     > vllm.log 2>&1 &
 
 VLLM_PID=$!
@@ -303,22 +307,22 @@ Work autonomously until the task is resolved.
     FILES_BEFORE=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
     INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
-    # vLLM with large context support - uses OpenAI-compatible API
-    # Context budget: 32k max input
-    #   - 512 map tokens (minimal - shell.rs is too large)
-    #   - 1k chat history (minimal for context)
-    #   - ~30.5k available for files aider explicitly adds
-    # Strategy: Start with NO files, let aider add only what it needs
+    # vLLM with Qwen2.5-Coder-14B - uses OpenAI-compatible API
+    # Context budget: 24k max (14B model needs more VRAM)
+    #   - 768 map tokens (repo structure)
+    #   - 1.5k chat history
+    #   - ~22k available for files aider explicitly adds
+    # 14B is 2x smarter than 7B, should reduce hallucinations
     log "INFO" "Starting aider session"
     timeout 900 aider \
-        --model openai/Qwen/Qwen2.5-Coder-7B-Instruct \
+        --model openai/Qwen/Qwen2.5-Coder-14B-Instruct \
         --openai-api-base "$VLLM_HOST/v1" \
         --openai-api-key "dummy" \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 512 \
-        --max-chat-history-tokens 1024 \
+        --map-tokens 768 \
+        --max-chat-history-tokens 1536 \
         --env-file /dev/null \
         --encoding utf-8 \
         --show-model-warnings \
