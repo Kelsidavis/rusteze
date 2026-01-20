@@ -1,4 +1,4 @@
-model: ollama/qwen2.5-coder:32k
+model: ollama/qwen2.5-coder:7b-32k
 edit-format: whole
 yes-always: true
 auto-commits: true
