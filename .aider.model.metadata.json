@@ -1,6 +1,6 @@
 {
   "ollama/qwen2.5-coder:7b-32k": {
-    "max_input_tokens": 28672,
+    "max_input_tokens": 30720,
     "max_output_tokens": 4096
   }
 }

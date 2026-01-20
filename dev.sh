@@ -334,7 +334,6 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     # 7B code-specialized model - faster than 14B, full 32k context
     log "INFO" "Starting aider session"
     timeout 900 aider \
-        AIDER_INSTRUCTIONS.md \
         --model ollama/qwen2.5-coder:7b-32k \
         --no-stream \
         --yes \
@@ -346,10 +345,11 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         --show-model-warnings \
         --message "
 $BUILD_STATUS_MSG
-Work on: $NEXT_TASKS
+Work on the next unchecked task from AIDER_INSTRUCTIONS.md:
+$NEXT_TASKS
 
 After EVERY change: RUSTFLAGS=\"-D warnings\" cargo build --release
-Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
+When task is complete and build passes, edit AIDER_INSTRUCTIONS.md to mark [x] the task.
 
 IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, explain why.
 "
@@ -537,7 +537,7 @@ IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, 
         INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
         # Build extended context if stuck on same task
-        CONTEXT_MSG="The local AI (aider with llama 3.1 8b) is stuck on this RustOS project."
+        CONTEXT_MSG="The local AI (aider with Qwen2.5-Coder 7B) is stuck on this RustOS project."
         if [ $SAME_TASK_COUNT -ge 3 ]; then
             CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
 1. Too vague or ambiguous
