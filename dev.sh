@@ -109,10 +109,10 @@ log "INFO" "========================================"
 unset CUDA_VISIBLE_DEVICES
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q4_0
-export OLLAMA_NUM_CTX=12288
+export OLLAMA_NUM_CTX=8192  # Reduced from 12288 to save VRAM
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_NUM_GPU=2
-export OLLAMA_GPU_LAYERS=50  # Offload some layers to CPU to avoid OOM
+export OLLAMA_GPU_LAYERS=15  # Aggressive CPU offload - minimal VRAM
 # Note: Ollama auto-distributes layers across GPUs since v0.11.5
 
 echo "Starting RustOS continuous development..."
@@ -325,82 +325,25 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         fi
     fi
 
-    # Build smart context for aider - give it the key files upfront
-    AIDER_FILES="AIDER_INSTRUCTIONS.md"
-
-    # Always include lib.rs as it's the entry point
-    if [ -f "src/lib.rs" ]; then
-        AIDER_FILES="$AIDER_FILES src/lib.rs"
-    fi
-
-    # Intelligently add relevant files based on the task description
-    TASK_LOWER=$(echo "$NEXT_TASK_ONELINE" | tr '[:upper:]' '[:lower:]')
-
-    # Map keywords to likely files
-    if echo "$TASK_LOWER" | grep -qE "shell|command|prompt"; then
-        [ -f "src/shell.rs" ] && AIDER_FILES="$AIDER_FILES src/shell.rs"
-    fi
-    if echo "$TASK_LOWER" | grep -qE "vfs|file|directory|mount|tmpfs|devfs|procfs"; then
-        [ -f "src/vfs.rs" ] && AIDER_FILES="$AIDER_FILES src/vfs.rs"
-        [ -f "src/tmpfs.rs" ] && AIDER_FILES="$AIDER_FILES src/tmpfs.rs"
-        [ -f "src/devfs.rs" ] && AIDER_FILES="$AIDER_FILES src/devfs.rs"
-        [ -f "src/procfs.rs" ] && AIDER_FILES="$AIDER_FILES src/procfs.rs"
-    fi
-    if echo "$TASK_LOWER" | grep -qE "process|task|thread|scheduler|context"; then
-        [ -f "src/scheduler.rs" ] && AIDER_FILES="$AIDER_FILES src/scheduler.rs"
-        [ -f "src/process.rs" ] && AIDER_FILES="$AIDER_FILES src/process.rs"
-    fi
-    if echo "$TASK_LOWER" | grep -qE "interrupt|irq|timer|pit|keyboard|idt"; then
-        [ -f "src/interrupts.rs" ] && AIDER_FILES="$AIDER_FILES src/interrupts.rs"
-    fi
-    if echo "$TASK_LOWER" | grep -qE "memory|allocat|heap|page|vmm"; then
-        [ -f "src/memory.rs" ] && AIDER_FILES="$AIDER_FILES src/memory.rs"
-        [ -f "src/allocator.rs" ] && AIDER_FILES="$AIDER_FILES src/allocator.rs"
-    fi
-    if echo "$TASK_LOWER" | grep -qE "elf|binary|loader|exec"; then
-        [ -f "src/elf.rs" ] && AIDER_FILES="$AIDER_FILES src/elf.rs"
-    fi
-
-    log "INFO" "Starting aider session with files: $AIDER_FILES"
-
-    # Use timeout to prevent indefinite hangs (15 minutes max per session)
-    # INCREASED context limits so aider can see more of the codebase via repo map
+    # Minimal VRAM usage - severely limit repo map to prevent loading too many files
+    log "INFO" "Starting aider session"
     timeout 900 aider \
-        $AIDER_FILES \
+        AIDER_INSTRUCTIONS.md \
         --model ollama/qwen3-30b-aider:32k \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 4096 \
-        --max-chat-history-tokens 8192 \
-        --architect \
+        --map-tokens 512 \
+        --max-chat-history-tokens 1024 \
+        --map-refresh manual \
         --message "
 $BUILD_STATUS_MSG
-CONTEXT: You are working on RustOS, a hobby OS kernel. The project structure is:
-- src/lib.rs: Main kernel entry point and module declarations
-- src/shell.rs: Interactive shell with commands
-- src/vfs.rs: Virtual filesystem interface
-- src/tmpfs.rs, devfs.rs, procfs.rs: Filesystem implementations
-- src/scheduler.rs, process.rs: Task management
-- src/interrupts.rs: Interrupt handling (PIT, keyboard, etc.)
-- src/memory.rs, allocator.rs: Memory management
-- src/elf.rs: ELF binary loading
+Work on: $NEXT_TASKS
 
-CURRENT TASK (attempt #$((SAME_TASK_COUNT + 1))):
-$NEXT_TASKS
+After EVERY change: RUSTFLAGS=\"-D warnings\" cargo build --release
+Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
 
-REQUIREMENTS:
-1. READ the relevant files first to understand existing code
-2. Make ONE complete, working change (don't leave TODOs)
-3. After your change: RUSTFLAGS=\"-D warnings\" cargo build --release
-4. Fix ALL errors and warnings until build passes
-5. Mark [x] in AIDER_INSTRUCTIONS.md when task is FULLY complete
-6. If you can't complete it in this session, explain why and STOP
-
-IMPORTANT:
-- Don't make partial changes - finish the task or skip it
-- If the task is already done, just mark [x] and explain
-- If you're unsure, ASK before coding
+IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, explain why.
 "
 
     EXIT_CODE=$?
