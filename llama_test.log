@@ -11,11 +11,12 @@ start: binding port with default address family
 main: loading model
 srv    load_model: loading model '/home/k/models/qwen2.5-coder-7b-instruct-q8_0.gguf'
 common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
-llama_params_fit_impl: projected to use 9339 MiB of device memory vs. 15559 MiB of free device memory
-llama_params_fit_impl: will leave 6219 >= 1024 MiB of free device memory, no changes needed
-llama_params_fit: successfully fit params to free device memory
-llama_params_fit: fitting params to free memory took 0.34 seconds
-llama_model_load_from_file_impl: using device CUDA0 (NVIDIA GeForce RTX 5080) (0000:0b:00.0) - 15559 MiB free
+llama_params_fit_impl: projected to use 9339 MiB of device memory vs. 9718 MiB of free device memory
+llama_params_fit_impl: cannot meet free memory target of 1024 MiB, need to reduce device memory by 645 MiB
+llama_params_fit_impl: context size set by user to 32768 -> no change
+llama_params_fit: failed to fit params to free device memory: n_gpu_layers already set by user to 99, abort
+llama_params_fit: fitting params to free memory took 0.54 seconds
+llama_model_load_from_file_impl: using device CUDA0 (NVIDIA GeForce RTX 5080) (0000:0b:00.0) - 9718 MiB free
 llama_model_loader: direct I/O is enabled, disabling mmap
 llama_model_loader: loaded meta data with 29 key-value pairs and 339 tensors from /home/k/models/qwen2.5-coder-7b-instruct-q8_0.gguf (version GGUF V3 (latest))
 llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
@@ -128,7 +129,6 @@ load_tensors: offloading 27 repeating layers to GPU
 load_tensors: offloaded 29/29 layers to GPU
 load_tensors:        CUDA0 model buffer size =  7165.44 MiB
 load_tensors:    CUDA_Host model buffer size =   552.23 MiB
-srv  log_server_r: request: GET /v1/models 127.0.0.1 503
 .......................................................................................
 common_init_result: added <|endoftext|> logit bias = -inf
 common_init_result: added <|im_end|> logit bias = -inf
@@ -155,8 +155,9 @@ sched_reserve:      CUDA0 compute buffer size =   382.01 MiB
 sched_reserve:  CUDA_Host compute buffer size =    71.01 MiB
 sched_reserve: graph nodes  = 959
 sched_reserve: graph splits = 2
-sched_reserve: reserve took 41.53 ms, sched copies = 1
+sched_reserve: reserve took 43.77 ms, sched copies = 1
 common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+srv  log_server_r: request: GET /v1/models 127.0.0.1 503
 srv    load_model: initializing slots, n_slots = 1
 slot   load_model: id  0 | task -1 | new slot, n_ctx = 32768
 srv    load_model: prompt cache is enabled, size limit: 8192 MiB
@@ -177,27 +178,4 @@ main: model loaded
 main: server is listening on http://0.0.0.0:8000
 main: starting the main loop...
 srv  update_slots: all slots are idle
-srv  params_from_: Chat format: Hermes 2 Pro
-slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
-slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
-slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
-slot update_slots: id  0 | task 0 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 44496
-srv    send_error: task id = 0, error: request (44496 tokens) exceeds the available context size (32768 tokens), try increasing it
-slot      release: id  0 | task 0 | stop processing: n_tokens = 0, truncated = 0
-srv  update_slots: no tokens to decode
-srv  update_slots: all slots are idle
-srv          stop: cancel task, id_task = 0
-srv  update_slots: all slots are idle
-srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 400
-srv  params_from_: Chat format: Hermes 2 Pro
-slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 84958162115
-slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
-slot launch_slot_: id  0 | task 3 | processing task, is_child = 0
-slot update_slots: id  0 | task 3 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 44497
-srv    send_error: task id = 3, error: request (44497 tokens) exceeds the available context size (32768 tokens), try increasing it
-slot      release: id  0 | task 3 | stop processing: n_tokens = 0, truncated = 0
-srv  update_slots: no tokens to decode
-srv  update_slots: all slots are idle
-srv          stop: cancel task, id_task = 3
-srv  update_slots: all slots are idle
-srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 400
+srv  log_server_r: request: GET /v1/models 127.0.0.1 200

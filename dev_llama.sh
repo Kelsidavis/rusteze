@@ -133,17 +133,7 @@ log "INFO" "Starting llama.cpp server on port 8000"
 # Use GPU 0 (RTX 5080) - llama.cpp uses CUDA_VISIBLE_DEVICES correctly
 export CUDA_VISIBLE_DEVICES=0
 
-nohup llama-server \
-    --model "$LLAMA_MODEL_PATH" \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --ctx-size 32768 \
-    --n-gpu-layers 99 \
-    --batch-size 512 \
-    --threads 16 \
-    --flash-attn on \
-    --parallel 1 \
-    > llama.log 2>&1 &
+nohup llama-server --model "$LLAMA_MODEL_PATH" --host 0.0.0.0 --port 8000 --ctx-size 32768 --n-gpu-layers 99 --batch-size 512 --threads 16 --flash-attn on --parallel 1 > llama.log 2>&1 &
 
 LLAMA_PID=$!
 log "INFO" "llama-server started with PID $LLAMA_PID"
