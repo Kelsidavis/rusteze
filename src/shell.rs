@@ -1,6 +1,7 @@
 // src/shell.rs
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use alloc::vec;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::sync::Arc;
@@ -571,6 +572,332 @@ impl Shell {
         }
     }
 
+    /// Expand arithmetic expressions $((expr))
+    fn expand_arithmetic(&self, text: &str) -> String {
+        let mut result = String::new();
+        let mut chars = text.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '$' && chars.peek() == Some(&'(') {
+                chars.next(); // consume first '('
+                if chars.peek() == Some(&'(') {
+                    chars.next(); // consume second '('
+
+                    // Extract the arithmetic expression
+                    let mut expr = String::new();
+                    let mut depth = 2; // We've consumed $(( already
+
+                    while let Some(c) = chars.next() {
+                        if c == '(' {
+                            depth += 1;
+                            expr.push(c);
+                        } else if c == ')' {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                            expr.push(c);
+                        } else {
+                            expr.push(c);
+                        }
+                    }
+
+                    // Evaluate the arithmetic expression
+                    match self.eval_arithmetic(&expr) {
+                        Ok(value) => result.push_str(&value.to_string()),
+                        Err(_) => {
+                            // On error, keep the original expression
+                            result.push_str("$((");
+                            result.push_str(&expr);
+                            result.push_str("))");
+                        }
+                    }
+                } else {
+                    // Not arithmetic, just $( - restore and continue
+                    result.push_str("$(");
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+
+        result
+    }
+
+    /// Evaluate a simple arithmetic expression (supports +, -, *, /, %)
+    fn eval_arithmetic(&self, expr: &str) -> Result<i64, &'static str> {
+        let expr = expr.trim();
+
+        // Simple recursive descent parser for arithmetic
+        // Supports: +, -, *, /, %, parentheses, and numbers
+
+        // For simplicity, we'll use a basic evaluation approach
+        // This is a minimal implementation - a full shell would need a proper parser
+
+        // First, try to parse as a simple number
+        if let Ok(num) = expr.parse::<i64>() {
+            return Ok(num);
+        }
+
+        // Try to find operators (order matters: +- last, then */ %)
+        for (i, ch) in expr.chars().enumerate() {
+            if ch == '+' && i > 0 {
+                let left = self.eval_arithmetic(&expr[..i])?;
+                let right = self.eval_arithmetic(&expr[i+1..])?;
+                return Ok(left + right);
+            } else if ch == '-' && i > 0 {
+                let left = self.eval_arithmetic(&expr[..i])?;
+                let right = self.eval_arithmetic(&expr[i+1..])?;
+                return Ok(left - right);
+            }
+        }
+
+        for (i, ch) in expr.chars().enumerate() {
+            if ch == '*' && i > 0 {
+                let left = self.eval_arithmetic(&expr[..i])?;
+                let right = self.eval_arithmetic(&expr[i+1..])?;
+                return Ok(left * right);
+            } else if ch == '/' && i > 0 {
+                let left = self.eval_arithmetic(&expr[..i])?;
+                let right = self.eval_arithmetic(&expr[i+1..])?;
+                if right == 0 {
+                    return Err("Division by zero");
+                }
+                return Ok(left / right);
+            } else if ch == '%' && i > 0 {
+                let left = self.eval_arithmetic(&expr[..i])?;
+                let right = self.eval_arithmetic(&expr[i+1..])?;
+                if right == 0 {
+                    return Err("Division by zero");
+                }
+                return Ok(left % right);
+            }
+        }
+
+        Err("Invalid arithmetic expression")
+    }
+
+    /// Expand brace expressions {a,b,c} and {1..10}
+    fn expand_braces(&self, text: &str) -> Vec<String> {
+        // Find first brace expression
+        if let Some(start) = text.find('{') {
+            if let Some(end) = text[start..].find('}') {
+                let end = start + end;
+                let prefix = &text[..start];
+                let suffix = &text[end+1..];
+                let inner = &text[start+1..end];
+
+                // Check if it's a range {1..10} or {a..z}
+                if let Some(range_pos) = inner.find("..") {
+                    let start_val = &inner[..range_pos];
+                    let end_val = &inner[range_pos+2..];
+
+                    // Try numeric range
+                    if let (Ok(start_num), Ok(end_num)) = (start_val.parse::<i32>(), end_val.parse::<i32>()) {
+                        let mut results = Vec::new();
+                        if start_num <= end_num {
+                            for i in start_num..=end_num {
+                                let expanded = format!("{}{}{}", prefix, i, suffix);
+                                // Recursively expand any remaining braces
+                                results.extend(self.expand_braces(&expanded));
+                            }
+                        } else {
+                            for i in (end_num..=start_num).rev() {
+                                let expanded = format!("{}{}{}", prefix, i, suffix);
+                                results.extend(self.expand_braces(&expanded));
+                            }
+                        }
+                        return results;
+                    }
+                    // Try character range
+                    else if start_val.len() == 1 && end_val.len() == 1 {
+                        let start_ch = start_val.chars().next().unwrap();
+                        let end_ch = end_val.chars().next().unwrap();
+                        let mut results = Vec::new();
+
+                        if start_ch <= end_ch {
+                            for ch in (start_ch as u8)..=(end_ch as u8) {
+                                let expanded = format!("{}{}{}", prefix, ch as char, suffix);
+                                results.extend(self.expand_braces(&expanded));
+                            }
+                        } else {
+                            for ch in (end_ch as u8..=start_ch as u8).rev() {
+                                let expanded = format!("{}{}{}", prefix, ch as char, suffix);
+                                results.extend(self.expand_braces(&expanded));
+                            }
+                        }
+                        return results;
+                    }
+                }
+
+                // It's a list {a,b,c}
+                let items: Vec<&str> = inner.split(',').collect();
+                let mut results = Vec::new();
+                for item in items {
+                    let expanded = format!("{}{}{}", prefix, item, suffix);
+                    // Recursively expand any remaining braces
+                    results.extend(self.expand_braces(&expanded));
+                }
+                return results;
+            }
+        }
+
+        // No braces found, return as-is
+        vec![text.to_string()]
+    }
+
+    /// Expand glob patterns (*, ?, [...])
+    fn expand_glob(&self, pattern: &str) -> Vec<String> {
+        // If no glob characters, return as-is
+        if !pattern.contains('*') && !pattern.contains('?') && !pattern.contains('[') {
+            return vec![pattern.to_string()];
+        }
+
+        // Extract directory path and filename pattern
+        let (dir_path, file_pattern) = if let Some(last_slash) = pattern.rfind('/') {
+            (&pattern[..last_slash], &pattern[last_slash+1..])
+        } else {
+            // No directory, use current directory
+            (self.cwd.as_str(), pattern)
+        };
+
+        // Try to list directory contents
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+        let dir_inode = match tmpfs.resolve_path(dir_path) {
+            Ok(inode) => inode,
+            Err(_) => {
+                drop(tmpfs);
+                return vec![pattern.to_string()];
+            }
+        };
+
+        let entries = match dir_inode.list() {
+            Ok(entries) => entries,
+            Err(_) => {
+                drop(tmpfs);
+                return vec![pattern.to_string()];
+            }
+        };
+        drop(tmpfs);
+
+        // Filter entries that match the glob pattern
+        let mut matches = Vec::new();
+        for entry in entries {
+            if self.glob_match(file_pattern, &entry) {
+                let full_path = if dir_path == "/" {
+                    format!("/{}", entry)
+                } else if dir_path == "." || dir_path == self.cwd.as_str() {
+                    entry
+                } else {
+                    format!("{}/{}", dir_path, entry)
+                };
+                matches.push(full_path);
+            }
+        }
+
+        // If no matches, return original pattern (standard shell behavior)
+        if matches.is_empty() {
+            vec![pattern.to_string()]
+        } else {
+            matches.sort();
+            matches
+        }
+    }
+
+    /// Match a filename against a glob pattern
+    fn glob_match(&self, pattern: &str, text: &str) -> bool {
+        let mut p_chars = pattern.chars().peekable();
+        let mut t_chars = text.chars().peekable();
+
+        while let Some(p) = p_chars.next() {
+            match p {
+                '*' => {
+                    // * matches zero or more characters
+                    // If * is last in pattern, it matches everything remaining
+                    if p_chars.peek().is_none() {
+                        return true;
+                    }
+
+                    // Try to match rest of pattern with remaining text
+                    let remaining_pattern: String = p_chars.clone().collect();
+                    let mut remaining_text = t_chars.clone();
+
+                    // Try matching from each position
+                    loop {
+                        let test_text: String = remaining_text.clone().collect();
+                        if self.glob_match(&remaining_pattern, &test_text) {
+                            return true;
+                        }
+                        if remaining_text.next().is_none() {
+                            break;
+                        }
+                    }
+                    return false;
+                }
+                '?' => {
+                    // ? matches exactly one character
+                    if t_chars.next().is_none() {
+                        return false;
+                    }
+                }
+                '[' => {
+                    // Character class [abc] or [a-z]
+                    let mut negated = false;
+                    let mut chars_in_class = Vec::new();
+
+                    if p_chars.peek() == Some(&'!') || p_chars.peek() == Some(&'^') {
+                        negated = true;
+                        p_chars.next();
+                    }
+
+                    // Collect characters until ]
+                    loop {
+                        match p_chars.next() {
+                            Some(']') => break,
+                            Some('-') if !chars_in_class.is_empty() => {
+                                // Range like a-z
+                                if let Some(start) = chars_in_class.last().copied() {
+                                    if let Some(&end) = p_chars.peek() {
+                                        p_chars.next(); // consume end char
+                                        for ch in (start as u8 + 1)..=(end as u8) {
+                                            chars_in_class.push(ch as char);
+                                        }
+                                    }
+                                }
+                            }
+                            Some(c) => chars_in_class.push(c),
+                            None => return false, // Unterminated [
+                        }
+                    }
+
+                    // Check if current text char matches class
+                    match t_chars.next() {
+                        Some(t) => {
+                            let matches = chars_in_class.contains(&t);
+                            if negated && matches {
+                                return false;
+                            }
+                            if !negated && !matches {
+                                return false;
+                            }
+                        }
+                        None => return false,
+                    }
+                }
+                c => {
+                    // Regular character must match exactly
+                    match t_chars.next() {
+                        Some(t) if t == c => {}
+                        _ => return false,
+                    }
+                }
+            }
+        }
+
+        // Pattern exhausted - text must also be exhausted for a match
+        t_chars.peek().is_none()
+    }
+
     /// Parse and execute a command line
     pub fn execute_line(&mut self, line: &str) -> Result<(), &'static str> {
         let line = line.trim();
@@ -586,11 +913,31 @@ impl Shell {
             return Ok(());
         }
 
-        // Expand command substitution first ($(cmd) or `cmd`)
+        // Expansion pipeline (order matters!):
+        // 1. Command substitution: $(cmd) or `cmd`
         let expanded_line = self.expand_command_substitution(line);
 
-        // Expand aliases
+        // 2. Arithmetic expansion: $((expr))
+        let expanded_line = self.expand_arithmetic(&expanded_line);
+
+        // 3. Brace expansion: {a,b,c} or {1..10}
+        let brace_expanded = self.expand_braces(&expanded_line);
+
+        // If brace expansion produced multiple results, execute each one
+        if brace_expanded.len() > 1 {
+            for expanded in brace_expanded {
+                // Recursively process each brace-expanded line
+                self.execute_line(&expanded)?;
+            }
+            return Ok(());
+        }
+
+        let expanded_line = brace_expanded.into_iter().next().unwrap_or(expanded_line);
+
+        // 4. Expand aliases
         let expanded_line = self.expand_aliases(&expanded_line);
+
+        // 5. Glob expansion happens per-argument in execute_simple_command
         let line = expanded_line.as_str();
 
         // Check for background process (&)
@@ -626,8 +973,20 @@ impl Shell {
         let mut parts = line.split_whitespace();
 
         if let Some(cmd) = parts.next() {
-            let args: Vec<&str> = parts.collect();
-            self.execute_command(cmd, &args)
+            let raw_args: Vec<&str> = parts.collect();
+
+            // Apply glob expansion to each argument
+            let mut expanded_args = Vec::new();
+            for arg in raw_args {
+                let glob_results = self.expand_glob(arg);
+                for expanded in glob_results {
+                    expanded_args.push(expanded);
+                }
+            }
+
+            // Convert to string slices for execute_command
+            let args_refs: Vec<&str> = expanded_args.iter().map(|s| s.as_str()).collect();
+            self.execute_command(cmd, &args_refs)
         } else {
             Ok(())
         }
