@@ -327,10 +327,10 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     fi
 
     # Qwen2.5-Coder 7B on RTX 5080 - 32k context with q8_0 KV cache
-    # Context budget: 26k max input (set in .aider.model.metadata.json)
-    #   - 2k map tokens (repo structure + file summaries)
-    #   - 4k chat history (conversation memory)
-    #   - ~20k available for actual file content
+    # Context budget: 30k max input (set in .aider.model.metadata.json)
+    #   - 1k map tokens (reduced for large shell.rs file)
+    #   - 2k chat history (reduced for large files)
+    #   - ~27k available for actual file content (shell.rs + AIDER_INSTRUCTIONS.md)
     # 7B code-specialized model - faster than 14B, full 32k context
     log "INFO" "Starting aider session"
     timeout 900 aider \
@@ -338,8 +338,8 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 2048 \
-        --max-chat-history-tokens 4096 \
+        --map-tokens 1024 \
+        --max-chat-history-tokens 2048 \
         --env-file /dev/null \
         --encoding utf-8 \
         --show-model-warnings \

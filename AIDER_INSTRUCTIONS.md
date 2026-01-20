@@ -346,9 +346,9 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] Command substitution ($(cmd) or `cmd`)
 - [x] Here documents (<<EOF syntax)
 - [x] Process substitution (<(cmd) syntax)
-- [ ] Glob expansion (*.txt, [a-z]?.log)
-- [ ] Brace expansion ({a,b,c}, {1..10})
-- [ ] Arithmetic expansion ($((2+2)))
+- [x] Glob expansion (*.txt, [a-z]?.log)
+- [x] Brace expansion ({a,b,c}, {1..10})
+- [x] Arithmetic expansion ($((2+2)))
 - [ ] Tilde expansion (~/ for home directory)
 
 ## Phase 7.5: Basic System Utilities
