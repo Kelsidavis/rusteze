@@ -334,9 +334,10 @@ impl Shell {
     #[allow(dead_code)]
     fn complete_command(&self, prefix: &str) -> Option<Vec<String>> {
         let commands = [
-            "alias", "bg", "cat", "cd", "clear/cls", "echo", "export",
-            "fg", "help", "jobs", "ls", "mkdir", "ps", "pwd", "reboot",
-            "rm", "source", "unalias", "unset",
+            "alias", "bg", "cat", "cd", "clear/cls", "cp", "echo", "export",
+            "fg", "grep", "head", "help", "jobs", "ls", "mkdir", "mv", "ps",
+            "pwd", "reboot", "rm", "rmdir", "source", "tail", "touch",
+            "unalias", "unset", "uptime", "wc",
         ];
 
         let matches: Vec<String> = commands
@@ -1369,6 +1370,9 @@ impl Shell {
             "touch" => self.cmd_touch(args),
             "wc" => self.cmd_wc(args),
             "grep" => self.cmd_grep(args),
+            "head" => self.cmd_head(args),
+            "tail" => self.cmd_tail(args),
+            "uptime" => self.cmd_uptime(args),
             "reboot" => self.cmd_reboot(),
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
@@ -1459,6 +1463,9 @@ impl Shell {
         crate::println!("  touch <file>     - Create empty file");
         crate::println!("  wc <file>        - Count lines, words, and characters");
         crate::println!("  grep <pat> <f>   - Search for pattern in file (-i -n)");
+        crate::println!("  head [-n N] <f>  - Display first N lines of file");
+        crate::println!("  tail [-n N] <f>  - Display last N lines of file");
+        crate::println!("  uptime           - Show system uptime");
         crate::println!("  reboot           - Reboot system");
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
@@ -2298,6 +2305,230 @@ impl Shell {
                 Err("file not found")
             }
         }
+    }
+
+    /// Head command - display first N lines of file
+    fn cmd_head(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let mut num_lines = 10; // Default to 10 lines
+        let mut file_path = None;
+
+        // Parse arguments
+        let mut i = 0;
+        while i < args.len() {
+            if args[i] == "-n" {
+                // Next arg should be number
+                if i + 1 < args.len() {
+                    if let Ok(n) = args[i + 1].parse::<usize>() {
+                        num_lines = n;
+                        i += 2;
+                        continue;
+                    } else {
+                        crate::println!("head: invalid number of lines: {}", args[i + 1]);
+                        return Err("invalid number");
+                    }
+                } else {
+                    crate::println!("head: option requires an argument -- 'n'");
+                    return Err("missing argument");
+                }
+            } else if args[i].starts_with('-') && args[i].len() > 1 {
+                // Try parsing as -NUM format (e.g., -5)
+                if let Ok(n) = args[i][1..].parse::<usize>() {
+                    num_lines = n;
+                    i += 1;
+                    continue;
+                } else {
+                    crate::println!("head: invalid option: {}", args[i]);
+                    return Err("invalid option");
+                }
+            } else {
+                // This is the file path
+                file_path = Some(args[i]);
+                break;
+            }
+        }
+
+        if file_path.is_none() {
+            crate::println!("Usage: head [-n NUM] <file>");
+            crate::println!("       head -NUM <file>");
+            return Err("missing file argument");
+        }
+
+        let file_path = self.resolve_path(file_path.unwrap());
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("head: {}: Is a directory", file_path);
+                    return Err("is a directory");
+                }
+
+                // Read entire file
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("head: read error: {}", e);
+                            return Err("read error");
+                        }
+                    }
+                }
+
+                // Convert to string and print first N lines
+                if let Ok(text) = core::str::from_utf8(&content) {
+                    let mut line_count = 0;
+                    for line in text.lines() {
+                        if line_count >= num_lines {
+                            break;
+                        }
+                        crate::println!("{}", line);
+                        line_count += 1;
+                    }
+                    Ok(())
+                } else {
+                    crate::println!("head: {}: Binary file or invalid encoding", file_path);
+                    Err("invalid file encoding")
+                }
+            }
+            Err(e) => {
+                crate::println!("head: {}: {}", file_path, e);
+                Err("file not found")
+            }
+        }
+    }
+
+    /// Tail command - display last N lines of file
+    fn cmd_tail(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let mut num_lines = 10; // Default to 10 lines
+        let mut file_path = None;
+
+        // Parse arguments
+        let mut i = 0;
+        while i < args.len() {
+            if args[i] == "-n" {
+                // Next arg should be number
+                if i + 1 < args.len() {
+                    if let Ok(n) = args[i + 1].parse::<usize>() {
+                        num_lines = n;
+                        i += 2;
+                        continue;
+                    } else {
+                        crate::println!("tail: invalid number of lines: {}", args[i + 1]);
+                        return Err("invalid number");
+                    }
+                } else {
+                    crate::println!("tail: option requires an argument -- 'n'");
+                    return Err("missing argument");
+                }
+            } else if args[i].starts_with('-') && args[i].len() > 1 {
+                // Try parsing as -NUM format (e.g., -5)
+                if let Ok(n) = args[i][1..].parse::<usize>() {
+                    num_lines = n;
+                    i += 1;
+                    continue;
+                } else {
+                    crate::println!("tail: invalid option: {}", args[i]);
+                    return Err("invalid option");
+                }
+            } else {
+                // This is the file path
+                file_path = Some(args[i]);
+                break;
+            }
+        }
+
+        if file_path.is_none() {
+            crate::println!("Usage: tail [-n NUM] <file>");
+            crate::println!("       tail -NUM <file>");
+            return Err("missing file argument");
+        }
+
+        let file_path = self.resolve_path(file_path.unwrap());
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("tail: {}: Is a directory", file_path);
+                    return Err("is a directory");
+                }
+
+                // Read entire file
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("tail: read error: {}", e);
+                            return Err("read error");
+                        }
+                    }
+                }
+
+                // Convert to string and collect all lines
+                if let Ok(text) = core::str::from_utf8(&content) {
+                    let lines: Vec<&str> = text.lines().collect();
+                    let total_lines = lines.len();
+
+                    // Calculate starting line (last N lines)
+                    let start_line = if total_lines > num_lines {
+                        total_lines - num_lines
+                    } else {
+                        0
+                    };
+
+                    // Print the last N lines
+                    for line in &lines[start_line..] {
+                        crate::println!("{}", line);
+                    }
+                    Ok(())
+                } else {
+                    crate::println!("tail: {}: Binary file or invalid encoding", file_path);
+                    Err("invalid file encoding")
+                }
+            }
+            Err(e) => {
+                crate::println!("tail: {}: {}", file_path, e);
+                Err("file not found")
+            }
+        }
+    }
+
+    /// Uptime command - show system uptime
+    fn cmd_uptime(&mut self, _args: &[&str]) -> Result<(), &'static str> {
+        let total_seconds = crate::pit::get_seconds();
+
+        let days = total_seconds / 86400;
+        let hours = (total_seconds % 86400) / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+
+        if days > 0 {
+            crate::println!("up {} days, {}:{:02}:{:02}", days, hours, minutes, seconds);
+        } else if hours > 0 {
+            crate::println!("up {}:{:02}:{:02}", hours, minutes, seconds);
+        } else if minutes > 0 {
+            crate::println!("up {}:{:02}", minutes, seconds);
+        } else {
+            crate::println!("up {} seconds", seconds);
+        }
+
+        Ok(())
     }
 
     /// Resolve a path (handle relative paths)

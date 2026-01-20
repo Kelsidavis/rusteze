@@ -388,13 +388,13 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Regex support (basic) - using simple string matching ✓
   - Line numbers (-n) ✓
   - Case insensitive (-i) ✓
-- [ ] `head` / `tail` - File viewing
-  - Show first/last N lines
-  - Follow mode for tail (-f)
-- [ ] `pwd` - Print working directory
-  - Show current directory path
-- [ ] `uptime` - System uptime
-  - Show how long kernel has been running
+- [x] `head` / `tail` - File viewing
+  - Show first/last N lines ✓
+  - Follow mode for tail (-f) (future enhancement)
+- [x] `pwd` - Print working directory
+  - Show current directory path ✓
+- [x] `uptime` - System uptime
+  - Show how long kernel has been running ✓
   - Load average (future)
 - [ ] `free` - Memory information
   - Display available/used memory
