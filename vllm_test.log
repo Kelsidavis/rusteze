@@ -1,8 +1,0 @@
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:33 [api_server.py:1351] vLLM API server version 0.13.0
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:33 [utils.py:253] non-default args: {'host': '0.0.0.0', 'model': 'Qwen/Qwen2.5-Coder-14B-Instruct', 'trust_remote_code': True, 'dtype': 'bfloat16', 'max_model_len': 24576, 'enforce_eager': True, 'disable_custom_all_reduce': True, 'max_num_seqs': 8}
-[0;36m(APIServer pid=536401)[0;0m The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:34 [model.py:514] Resolved architecture: Qwen2ForCausalLM
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:34 [model.py:1661] Using max model len 24576
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:34 [scheduler.py:230] Chunked prefill is enabled with max_num_batched_tokens=2048.
-[0;36m(APIServer pid=536401)[0;0m WARNING 01-19 22:25:34 [vllm.py:622] Enforce eager set, overriding optimization level to -O0
-[0;36m(APIServer pid=536401)[0;0m INFO 01-19 22:25:34 [vllm.py:722] Cudagraph is disabled under eager mode
