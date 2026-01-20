@@ -276,8 +276,8 @@ while true; do
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║ Session: $SESSION | $(date '+%Y-%m-%d %H:%M:%S')"
     echo "║ Commits: $COMMITS | Done: $DONE | Todo: $TODO"
-    if [ $SAME_TASK_COUNT -gt 5 ]; then
-        echo "║ ⚠ STUCK: Same task for $SAME_TASK_COUNT sessions!"
+    if [ $SAME_TASK_COUNT -gt 1 ]; then
+        echo "║ ⚠ Same task attempt: $SAME_TASK_COUNT (will escalate at 3)"
     fi
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
@@ -325,23 +325,84 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         fi
     fi
 
-    # Let aider discover files via repo map instead of pre-loading
+    # Build smart context for aider - give it the key files upfront
+    AIDER_FILES="AIDER_INSTRUCTIONS.md"
+
+    # Always include lib.rs as it's the entry point
+    if [ -f "src/lib.rs" ]; then
+        AIDER_FILES="$AIDER_FILES src/lib.rs"
+    fi
+
+    # Intelligently add relevant files based on the task description
+    TASK_LOWER=$(echo "$NEXT_TASK_ONELINE" | tr '[:upper:]' '[:lower:]')
+
+    # Map keywords to likely files
+    if echo "$TASK_LOWER" | grep -qE "shell|command|prompt"; then
+        [ -f "src/shell.rs" ] && AIDER_FILES="$AIDER_FILES src/shell.rs"
+    fi
+    if echo "$TASK_LOWER" | grep -qE "vfs|file|directory|mount|tmpfs|devfs|procfs"; then
+        [ -f "src/vfs.rs" ] && AIDER_FILES="$AIDER_FILES src/vfs.rs"
+        [ -f "src/tmpfs.rs" ] && AIDER_FILES="$AIDER_FILES src/tmpfs.rs"
+        [ -f "src/devfs.rs" ] && AIDER_FILES="$AIDER_FILES src/devfs.rs"
+        [ -f "src/procfs.rs" ] && AIDER_FILES="$AIDER_FILES src/procfs.rs"
+    fi
+    if echo "$TASK_LOWER" | grep -qE "process|task|thread|scheduler|context"; then
+        [ -f "src/scheduler.rs" ] && AIDER_FILES="$AIDER_FILES src/scheduler.rs"
+        [ -f "src/process.rs" ] && AIDER_FILES="$AIDER_FILES src/process.rs"
+    fi
+    if echo "$TASK_LOWER" | grep -qE "interrupt|irq|timer|pit|keyboard|idt"; then
+        [ -f "src/interrupts.rs" ] && AIDER_FILES="$AIDER_FILES src/interrupts.rs"
+    fi
+    if echo "$TASK_LOWER" | grep -qE "memory|allocat|heap|page|vmm"; then
+        [ -f "src/memory.rs" ] && AIDER_FILES="$AIDER_FILES src/memory.rs"
+        [ -f "src/allocator.rs" ] && AIDER_FILES="$AIDER_FILES src/allocator.rs"
+    fi
+    if echo "$TASK_LOWER" | grep -qE "elf|binary|loader|exec"; then
+        [ -f "src/elf.rs" ] && AIDER_FILES="$AIDER_FILES src/elf.rs"
+    fi
+
+    log "INFO" "Starting aider session with files: $AIDER_FILES"
+
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
-    log "INFO" "Starting aider session"
+    # INCREASED context limits so aider can see more of the codebase
+    # Use --read mode to let aider pull in additional files as needed
     timeout 900 aider \
-        AIDER_INSTRUCTIONS.md \
+        $AIDER_FILES \
+        --read src/*.rs \
         --model ollama/qwen3-30b-aider:32k \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 1024 \
-        --max-chat-history-tokens 2048 \
+        --map-tokens 4096 \
+        --max-chat-history-tokens 8192 \
+        --architect \
         --message "
 $BUILD_STATUS_MSG
-Work on: $NEXT_TASKS
+CONTEXT: You are working on RustOS, a hobby OS kernel. The project structure is:
+- src/lib.rs: Main kernel entry point and module declarations
+- src/shell.rs: Interactive shell with commands
+- src/vfs.rs: Virtual filesystem interface
+- src/tmpfs.rs, devfs.rs, procfs.rs: Filesystem implementations
+- src/scheduler.rs, process.rs: Task management
+- src/interrupts.rs: Interrupt handling (PIT, keyboard, etc.)
+- src/memory.rs, allocator.rs: Memory management
+- src/elf.rs: ELF binary loading
 
-After EVERY change: RUSTFLAGS=\"-D warnings\" cargo build --release
-Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
+CURRENT TASK (attempt #$((SAME_TASK_COUNT + 1))):
+$NEXT_TASKS
+
+REQUIREMENTS:
+1. READ the relevant files first to understand existing code
+2. Make ONE complete, working change (don't leave TODOs)
+3. After your change: RUSTFLAGS=\"-D warnings\" cargo build --release
+4. Fix ALL errors and warnings until build passes
+5. Mark [x] in AIDER_INSTRUCTIONS.md when task is FULLY complete
+6. If you can't complete it in this session, explain why and STOP
+
+IMPORTANT:
+- Don't make partial changes - finish the task or skip it
+- If the task is already done, just mark [x] and explain
+- If you're unsure, ASK before coding
 "
 
     EXIT_CODE=$?
@@ -500,8 +561,9 @@ Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
     fi
 
     # Escalate if stuck on same task for too long OR no commits
-    if [ $STUCK_COUNT -ge 2 ] || [ $SAME_TASK_COUNT -ge 8 ]; then
-        if [ $SAME_TASK_COUNT -ge 8 ]; then
+    # REDUCED from 8 to 3 - don't let aider spin its wheels
+    if [ $STUCK_COUNT -ge 2 ] || [ $SAME_TASK_COUNT -ge 3 ]; then
+        if [ $SAME_TASK_COUNT -ge 3 ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "⚠ TASK LOOP DETECTED: Same task for $SAME_TASK_COUNT sessions!"
@@ -527,7 +589,7 @@ Mark [x] in AIDER_INSTRUCTIONS.md when task is complete and build passes.
 
         # Build extended context if stuck on same task
         CONTEXT_MSG="The local AI (aider with qwen3-30b) is stuck on this RustOS project."
-        if [ $SAME_TASK_COUNT -ge 8 ]; then
+        if [ $SAME_TASK_COUNT -ge 3 ]; then
             CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
 1. Too vague or ambiguous
 2. Already complete (but needs checkbox marking)
@@ -683,7 +745,7 @@ Please fix any issues and ensure build passes. Be brief.
 
         # Check for stuck loop
         STUCK_WARNING=""
-        if [ $SAME_TASK_COUNT -ge 5 ]; then
+        if [ $SAME_TASK_COUNT -ge 3 ]; then
             STUCK_WARNING="⚠ STUCK LOOP DETECTED: The local AI has been working on the same task for $SAME_TASK_COUNT sessions without completing it:
 Task: $NEXT_TASK_ONELINE
 
