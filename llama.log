@@ -1,0 +1,11 @@
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA GeForce RTX 5080, compute capability 12.0, VMM: yes
+error while handling argument "--flash-attn": error: unknown value for --flash-attn: '--parallel'
+
+
+usage:
+-fa,   --flash-attn [on|off|auto]       set Flash Attention use ('on', 'off', or 'auto', default: 'auto')
+                                        (env: LLAMA_ARG_FLASH_ATTN)
+
+
+to show complete usage, run with -h
