@@ -118,7 +118,7 @@ export CUDA_VISIBLE_DEVICES=1  # RTX 5080 only
 # Kill any existing vLLM/aider processes
 echo "Cleaning up existing processes..."
 pkill -9 -f "vllm.*api_server" 2>/dev/null
-pkill -9 -f "aider" 2>/dev/null
+pkill -9 -f "bin/aider" 2>/dev/null
 sleep 2
 
 # Wait for processes to fully terminate
