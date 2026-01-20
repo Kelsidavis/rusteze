@@ -113,7 +113,7 @@ export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_GPU_LAYERS=99  # Let ollama auto-detect - 8B fits easily in 16GB
-# RTX 5080 16GB: 32k context with q8_0 KV cache for full GPU utilization
+# RTX 5080 16GB: 24k context with q8_0 KV cache for full GPU utilization
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
@@ -175,7 +175,7 @@ load_model() {
 
         # Use timeout on curl to prevent hanging
         if timeout $timeout_secs curl -s http://localhost:11434/api/generate -d '{
-          "model": "llama3.1:32k",
+          "model": "llama3.1:24k",
           "prompt": "hi",
           "stream": false,
           "options": {"num_predict": 1}
@@ -187,7 +187,7 @@ load_model() {
             echo "Warming up model..."
             log "INFO" "Warming up model KV cache"
             timeout 120 curl -s http://localhost:11434/api/generate -d '{
-              "model": "llama3.1:32k",
+              "model": "llama3.1:24k",
               "prompt": "You are a coding assistant. Implement the next feature.",
               "stream": false,
               "options": {"num_predict": 20}
@@ -326,20 +326,20 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     fi
 
     # 8B model on RTX 5080 - 32k context with q8_0 for full GPU utilization
-    # Context budget: 32k total
-    #   - 8k map tokens (repo structure + file summaries)
-    #   - 8k chat history (conversation memory)
-    #   - ~15k available for actual file content
+    # Context budget: 24k total
+    #   - 6k map tokens (repo structure + file summaries)
+    #   - 6k chat history (conversation memory)
+    #   - ~11k available for actual file content
     # No file size limits - can read entire large files (500+ lines)
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
-        --model ollama/llama3.1:32k \
+        --model ollama/llama3.1:24k \
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 8192 \
-        --max-chat-history-tokens 8192 \
+        --map-tokens 6144 \
+        --max-chat-history-tokens 6144 \
         --env-file /dev/null \
         --encoding utf-8 \
         --show-model-warnings \
@@ -380,7 +380,7 @@ IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, 
         # Explicitly unload model from VRAM before killing ollama
         echo "Unloading model from VRAM..."
         curl -s -X DELETE http://localhost:11434/api/generate \
-            -d '{"model":"llama3.1:32k","keep_alive":0}' \
+            -d '{"model":"llama3.1:24k","keep_alive":0}' \
             --max-time 5 2>/dev/null || true
         sleep 2
 
