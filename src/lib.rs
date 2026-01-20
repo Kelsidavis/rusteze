@@ -202,7 +202,9 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
 
     // Initialize VFS and tmpfs
     println!("Initializing Virtual Filesystem (VFS)...");
-    let tmpfs = tmpfs::TmpFs::new();
+
+    // Use the global TMPFS instance
+    let tmpfs = tmpfs::TMPFS.lock();
     println!("TmpFS mounted as root filesystem");
 
     // Test VFS operations
@@ -377,6 +379,38 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     }
 
     println!("procfs initialized successfully");
+
+    // Release the tmpfs lock
+    drop(tmpfs);
+
+    // Test shell commands
+    println!("\n=== Testing Shell Commands ===");
+    let mut shell = shell::Shell::new();
+
+    println!("\n1. Testing 'ls' on root directory:");
+    let _ = shell.execute_line("ls");
+
+    println!("\n2. Testing 'pwd':");
+    let _ = shell.execute_line("pwd");
+
+    println!("\n3. Testing 'cat /test.txt':");
+    let _ = shell.execute_line("cat /test.txt");
+
+    println!("\n4. Testing 'ls /home':");
+    let _ = shell.execute_line("ls /home");
+
+    println!("\n5. Testing 'cd /home':");
+    let _ = shell.execute_line("cd /home");
+    let _ = shell.execute_line("pwd");
+
+    println!("\n6. Testing 'cat welcome.txt' (relative path):");
+    let _ = shell.execute_line("cat welcome.txt");
+
+    println!("\n7. Testing 'cd /' and 'ls':");
+    let _ = shell.execute_line("cd /");
+    let _ = shell.execute_line("ls");
+
+    println!("\n=== Shell Commands Test Complete ===\n");
 
     // ELF loader and init process infrastructure ready
     println!("ELF binary loader initialized");

@@ -246,3 +246,10 @@ impl Default for TmpFs {
         Self::new()
     }
 }
+
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Global TmpFS instance
+    pub static ref TMPFS: Mutex<TmpFs> = Mutex::new(TmpFs::new());
+}

@@ -4,6 +4,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
+use alloc::format;
 
 /// Environment variables for the shell
 pub struct EnvironmentVariables {
@@ -45,6 +46,7 @@ impl EnvironmentVariables {
 /// Shell state structure
 pub struct Shell {
     env: EnvironmentVariables,
+    cwd: String,
 }
 
 impl Shell {
@@ -52,6 +54,7 @@ impl Shell {
     pub fn new() -> Self {
         Self {
             env: EnvironmentVariables::new(),
+            cwd: String::from("/"),
         }
     }
 
@@ -85,6 +88,10 @@ impl Shell {
             "exit" => self.cmd_exit(),
             "help" => self.cmd_help(),
             "ps" => self.cmd_ps(),
+            "cat" => self.cmd_cat(args),
+            "ls" => self.cmd_ls(args),
+            "pwd" => self.cmd_pwd(args),
+            "cd" => self.cmd_cd(args),
             _ => {
                 crate::println!("Command not found: {}", cmd);
                 Err("command not found")
@@ -162,6 +169,10 @@ impl Shell {
         crate::println!("  clear/cls        - Clear the screen");
         crate::println!("  help             - Show this help message");
         crate::println!("  ps               - List running processes");
+        crate::println!("  cat <file>       - Display file contents");
+        crate::println!("  ls [dir]         - List directory contents");
+        crate::println!("  pwd              - Print working directory");
+        crate::println!("  cd <dir>         - Change directory");
         crate::println!("  exit             - Exit the shell");
         Ok(())
     }
@@ -185,6 +196,150 @@ impl Shell {
         crate::println!("Total: {} process(es)", count);
 
         Ok(())
+    }
+
+    /// Cat command - display file contents
+    fn cmd_cat(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: cat <file>");
+            return Err("missing file argument");
+        }
+
+        let path = self.resolve_path(args[0]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("cat: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            if let Ok(s) = core::str::from_utf8(&buffer[..bytes_read]) {
+                                crate::print!("{}", s);
+                            } else {
+                                crate::println!("cat: {}: Binary file", args[0]);
+                                return Err("binary file");
+                            }
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("cat: {}: {}", args[0], e);
+                            return Err("read error");
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => {
+                crate::println!("cat: {}: {}", args[0], e);
+                Err("file not found")
+            }
+        }
+    }
+
+    /// Ls command - list directory contents
+    fn cmd_ls(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let path = if args.is_empty() {
+            self.cwd.clone()
+        } else {
+            self.resolve_path(args[0])
+        };
+
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&path) {
+            Ok(inode) => {
+                if inode.file_type() != crate::vfs::FileType::Directory {
+                    crate::println!("ls: {}: Not a directory", args.get(0).unwrap_or(&"."));
+                    return Err("not a directory");
+                }
+
+                match inode.list() {
+                    Ok(entries) => {
+                        for entry in entries {
+                            // Check if it's a directory by looking it up
+                            if let Ok(child_inode) = inode.lookup(&entry) {
+                                if child_inode.file_type() == crate::vfs::FileType::Directory {
+                                    crate::println!("{}/", entry);
+                                } else {
+                                    crate::println!("{}", entry);
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        crate::println!("ls: {}: {}", args.get(0).unwrap_or(&"."), e);
+                        Err("read error")
+                    }
+                }
+            }
+            Err(e) => {
+                crate::println!("ls: {}: {}", args.get(0).unwrap_or(&"."), e);
+                Err("directory not found")
+            }
+        }
+    }
+
+    /// Pwd command - print working directory
+    fn cmd_pwd(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if !args.is_empty() {
+            crate::println!("pwd: too many arguments");
+            return Err("too many arguments");
+        }
+
+        crate::println!("{}", self.cwd);
+        Ok(())
+    }
+
+    /// Cd command - change directory
+    fn cmd_cd(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        let new_path = if args.is_empty() {
+            "/".to_string()
+        } else {
+            self.resolve_path(args[0])
+        };
+
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&new_path) {
+            Ok(inode) => {
+                if inode.file_type() != crate::vfs::FileType::Directory {
+                    crate::println!("cd: {}: Not a directory", args[0]);
+                    return Err("not a directory");
+                }
+                drop(tmpfs); // Release lock before modifying self
+                self.cwd = new_path;
+                Ok(())
+            }
+            Err(e) => {
+                crate::println!("cd: {}: {}", args.get(0).unwrap_or(&""), e);
+                Err("directory not found")
+            }
+        }
+    }
+
+    /// Resolve a path (handle relative paths)
+    fn resolve_path(&self, path: &str) -> String {
+        if path.starts_with('/') {
+            // Absolute path
+            path.to_string()
+        } else {
+            // Relative path
+            if self.cwd == "/" {
+                format!("/{}", path)
+            } else {
+                format!("{}/{}", self.cwd, path)
+            }
+        }
     }
 }
 

@@ -1316,3 +1316,6 @@
 [2026-01-19 16:22:32] [INFO] Model warmup completed successfully
 [2026-01-19 16:22:33] [INFO] Testing 1 uncommitted files
 [2026-01-19 16:22:33] [INFO] Uncommitted changes compile, auto-committing
+[2026-01-19 16:22:34] [INFO] Pushed 1 commit(s)
+[2026-01-19 16:22:34] [WARN] Task loop: 8 sessions on same task
+[2026-01-19 16:22:34] [INFO] Escalating to Claude Code
