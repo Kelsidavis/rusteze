@@ -1,11 +1,11 @@
-model: ollama/llama3.1:32k
+model: ollama/qwen2.5-coder:32k
 edit-format: whole
 yes-always: true
 auto-commits: true
 auto-test: false
 suggest-shell-commands: true
-map-tokens: 2048
-max-chat-history-tokens: 4096
+map-tokens: 4096
+max-chat-history-tokens: 8192
 cache-prompts: true
 attribute-author: false
 attribute-committer: false
