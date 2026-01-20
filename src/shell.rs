@@ -1366,6 +1366,9 @@ impl Shell {
             "rm" => self.cmd_rm(args),
             "cp" => self.cmd_cp(args),
             "mv" => self.cmd_mv(args),
+            "touch" => self.cmd_touch(args),
+            "wc" => self.cmd_wc(args),
+            "grep" => self.cmd_grep(args),
             "reboot" => self.cmd_reboot(),
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
@@ -1453,6 +1456,9 @@ impl Shell {
         crate::println!("  rm <file>        - Remove file");
         crate::println!("  cp <src> <dst>   - Copy file");
         crate::println!("  mv <src> <dst>   - Move/rename file");
+        crate::println!("  touch <file>     - Create empty file");
+        crate::println!("  wc <file>        - Count lines, words, and characters");
+        crate::println!("  grep <pat> <f>   - Search for pattern in file (-i -n)");
         crate::println!("  reboot           - Reboot system");
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
@@ -2093,6 +2099,202 @@ impl Shell {
             }
             Err(e) => {
                 crate::println!("source: {}: {}", args[0], e);
+                Err("file not found")
+            }
+        }
+    }
+
+    /// Touch command - create empty file or update timestamp
+    fn cmd_touch(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: touch <file>");
+            return Err("missing file argument");
+        }
+
+        let file_path = self.resolve_path(args[0]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        // Check if file already exists
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                // File exists, would update timestamp but we don't have timestamps yet
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("touch: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+                crate::println!("touch: {}: File already exists", args[0]);
+                Ok(())
+            }
+            Err(_) => {
+                // File doesn't exist, create it
+                match tmpfs.create_file(&file_path) {
+                    Ok(_) => {
+                        crate::println!("Created empty file: {}", args[0]);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        crate::println!("touch: {}: {}", args[0], e);
+                        Err("failed to create file")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Word count command - count lines, words, and characters
+    fn cmd_wc(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.is_empty() {
+            crate::println!("Usage: wc <file>");
+            return Err("missing file argument");
+        }
+
+        let file_path = self.resolve_path(args[0]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("wc: {}: Is a directory", args[0]);
+                    return Err("is a directory");
+                }
+
+                // Read entire file
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("wc: read error: {}", e);
+                            return Err("read error");
+                        }
+                    }
+                }
+
+                // Count lines, words, and characters
+                let text = core::str::from_utf8(&content).unwrap_or("");
+                let lines = text.lines().count();
+                let words = text.split_whitespace().count();
+                let chars = content.len();
+
+                crate::println!("  {}  {}  {} {}", lines, words, chars, args[0]);
+                Ok(())
+            }
+            Err(e) => {
+                crate::println!("wc: {}: {}", args[0], e);
+                Err("file not found")
+            }
+        }
+    }
+
+    /// Grep command - search for pattern in file
+    fn cmd_grep(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if args.len() < 2 {
+            crate::println!("Usage: grep <pattern> <file>");
+            crate::println!("Options:");
+            crate::println!("  -i    Case insensitive search");
+            crate::println!("  -n    Show line numbers");
+            return Err("missing arguments");
+        }
+
+        // Parse flags
+        let mut case_insensitive = false;
+        let mut show_line_numbers = false;
+        let mut pattern_idx = 0;
+        let mut file_idx = 1;
+
+        // Check for flags
+        for (idx, arg) in args.iter().enumerate() {
+            if arg.starts_with('-') {
+                if arg.contains('i') {
+                    case_insensitive = true;
+                }
+                if arg.contains('n') {
+                    show_line_numbers = true;
+                }
+            } else {
+                if pattern_idx == 0 {
+                    pattern_idx = idx;
+                    file_idx = idx + 1;
+                }
+            }
+        }
+
+        if file_idx >= args.len() {
+            crate::println!("Usage: grep <pattern> <file>");
+            return Err("missing file argument");
+        }
+
+        let pattern = args[pattern_idx];
+        let file_path = self.resolve_path(args[file_idx]);
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        match tmpfs.resolve_path(&file_path) {
+            Ok(inode) => {
+                if inode.file_type() == crate::vfs::FileType::Directory {
+                    crate::println!("grep: {}: Is a directory", args[file_idx]);
+                    return Err("is a directory");
+                }
+
+                // Read entire file
+                let mut content = Vec::new();
+                let mut offset = 0;
+                let mut buffer = [0u8; 1024];
+
+                loop {
+                    match inode.read(offset, &mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(bytes_read) => {
+                            content.extend_from_slice(&buffer[..bytes_read]);
+                            offset += bytes_read;
+                        }
+                        Err(e) => {
+                            crate::println!("grep: read error: {}", e);
+                            return Err("read error");
+                        }
+                    }
+                }
+
+                // Search for pattern in each line
+                if let Ok(text) = core::str::from_utf8(&content) {
+                    let mut found_any = false;
+
+                    for (line_num, line) in text.lines().enumerate() {
+                        let matches = if case_insensitive {
+                            // Simple case-insensitive search (ASCII only)
+                            line.to_lowercase().contains(&pattern.to_lowercase())
+                        } else {
+                            line.contains(pattern)
+                        };
+
+                        if matches {
+                            found_any = true;
+                            if show_line_numbers {
+                                crate::println!("{}:{}", line_num + 1, line);
+                            } else {
+                                crate::println!("{}", line);
+                            }
+                        }
+                    }
+
+                    if !found_any {
+                        // grep exits with status 1 if no matches found, but we don't have exit codes
+                        // Just silently succeed
+                    }
+                    Ok(())
+                } else {
+                    crate::println!("grep: {}: Binary file or invalid encoding", args[file_idx]);
+                    Err("invalid file encoding")
+                }
+            }
+            Err(e) => {
+                crate::println!("grep: {}: {}", args[file_idx], e);
                 Err("file not found")
             }
         }

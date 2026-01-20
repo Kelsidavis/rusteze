@@ -377,17 +377,17 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
   - Recursive deletion (-r) (TODO)
   - Force flag (-f) (TODO)
   - Interactive mode (-i) (TODO)
-- [ ] `touch` - Create empty files
-  - Create new file if doesn't exist
+- [x] `touch` - Create empty files
+  - Create new file if doesn't exist ✓
   - Update timestamps (future)
-- [ ] `wc` - Word count
-  - Line, word, character counting
-  - Useful for pipelines
-- [ ] `grep` - Pattern search
-  - Simple string matching in files
-  - Regex support (basic)
-  - Line numbers (-n)
-  - Case insensitive (-i)
+- [x] `wc` - Word count
+  - Line, word, character counting ✓
+  - Useful for pipelines ✓
+- [x] `grep` - Pattern search
+  - Simple string matching in files ✓
+  - Regex support (basic) - using simple string matching ✓
+  - Line numbers (-n) ✓
+  - Case insensitive (-i) ✓
 - [ ] `head` / `tail` - File viewing
   - Show first/last N lines
   - Follow mode for tail (-f)
