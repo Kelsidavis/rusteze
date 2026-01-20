@@ -326,6 +326,11 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     fi
 
     # 8B model on RTX 5080 - can handle massive 64k context
+    # Context budget: 64k total
+    #   - 16k map tokens (repo structure + file summaries)
+    #   - 16k chat history (conversation memory)
+    #   - ~31k available for actual file content
+    # No file size limits - can read entire large files (500+ lines)
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
@@ -531,7 +536,7 @@ IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, 
         INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
         # Build extended context if stuck on same task
-        CONTEXT_MSG="The local AI (aider with qwen3-30b) is stuck on this RustOS project."
+        CONTEXT_MSG="The local AI (aider with llama 3.1 8b) is stuck on this RustOS project."
         if [ $SAME_TASK_COUNT -ge 3 ]; then
             CONTEXT_MSG="⚠ TASK LOOP: The local AI has attempted this same task for $SAME_TASK_COUNT sessions, making changes that compile but never marking it complete. This task may be:
 1. Too vague or ambiguous
