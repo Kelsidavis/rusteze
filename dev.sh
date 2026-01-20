@@ -110,11 +110,11 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
 export GPU_DEVICE_ORDINAL=1
 export OLLAMA_FLASH_ATTENTION=1
-export OLLAMA_KV_CACHE_TYPE=f16
+export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_NUM_CTX=32768  # Force 32k context limit
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_GPU_LAYERS=99  # Let ollama auto-detect - 8B fits easily in 16GB
-# RTX 5080 16GB: 32k context with f16 KV cache for full GPU utilization
+# RTX 5080 16GB: 32k context with q8_0 KV cache (ollama auto-expands to ~52k)
 
 echo "Starting RustOS continuous development..."
 echo "Press Ctrl+C to stop"
