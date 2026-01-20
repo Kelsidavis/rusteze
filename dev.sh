@@ -327,10 +327,10 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     fi
 
     # Qwen2.5-Coder 14B on RTX 5080 - 32k context with q8_0 KV cache
-    # Context budget: 24k max input (set in .aider.model.metadata.json)
-    #   - 4k map tokens (repo structure + file summaries)
-    #   - 8k chat history (conversation memory)
-    #   - ~12k available for actual file content
+    # Context budget: 26k max input (set in .aider.model.metadata.json)
+    #   - 2k map tokens (repo structure + file summaries)
+    #   - 4k chat history (conversation memory)
+    #   - ~20k available for actual file content
     # Specialized code model - better at complex tasks than Llama 8B
     log "INFO" "Starting aider session"
     timeout 900 aider \
