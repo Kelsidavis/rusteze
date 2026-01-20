@@ -112,8 +112,9 @@ log "INFO" "dev.sh started"
 log "INFO" "========================================"
 
 # Export vLLM environment variables
+# CRITICAL: Make GPU 1 (RTX 5080) appear as GPU 0 to vLLM
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=1  # RTX 5080 only
+export CUDA_VISIBLE_DEVICES=1  # RTX 5080 becomes device 0 in CUDA context
 
 # Kill any existing vLLM/aider processes
 echo "Cleaning up existing processes..."
@@ -136,18 +137,19 @@ done
 echo "Starting vLLM server..."
 log "INFO" "Starting vLLM server on port 8000"
 
-nohup python3 -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=1 nohup python3 -m vllm.entrypoints.openai.api_server \
     --model "$VLLM_MODEL" \
     --host 0.0.0.0 \
     --port 8000 \
     --dtype bfloat16 \
-    --max-model-len 24576 \
-    --gpu-memory-utilization 0.90 \
-    --max-num-seqs 8 \
+    --max-model-len 32768 \
+    --gpu-memory-utilization 0.85 \
+    --max-num-seqs 16 \
     --disable-log-requests \
     --trust-remote-code \
     --enforce-eager \
     --disable-custom-all-reduce \
+    --tensor-parallel-size 1 \
     > vllm.log 2>&1 &
 
 VLLM_PID=$!
@@ -308,10 +310,11 @@ Work autonomously until the task is resolved.
     INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
 
     # vLLM with Qwen2.5-Coder-14B - uses OpenAI-compatible API
-    # Context budget: 24k max (14B model needs more VRAM)
-    #   - 768 map tokens (repo structure)
-    #   - 1.5k chat history
-    #   - ~22k available for files aider explicitly adds
+    # Context budget: 32k max (full model capacity)
+    #   - Model uses ~7GB VRAM, leaving ~9GB for KV cache
+    #   - 1k map tokens (repo structure)
+    #   - 2k chat history
+    #   - ~29k available for files aider explicitly adds
     # 14B is 2x smarter than 7B, should reduce hallucinations
     log "INFO" "Starting aider session"
     timeout 900 aider \
@@ -321,8 +324,8 @@ Work autonomously until the task is resolved.
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 768 \
-        --max-chat-history-tokens 1536 \
+        --map-tokens 1024 \
+        --max-chat-history-tokens 2048 \
         --env-file /dev/null \
         --encoding utf-8 \
         --show-model-warnings \
