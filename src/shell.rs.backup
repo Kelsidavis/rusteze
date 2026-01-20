@@ -1021,8 +1021,119 @@ impl Shell {
 
     /// Reboot command - reboot system
     fn cmd_reboot(&mut self) -> Result<(), &'static str> {
+
+    /// Jobs command - list background jobs
+    fn cmd_jobs(&mut self, _args: &[&str]) -> Result<(), &'static str> {
+        if self.jobs.is_empty() {
+            crate::println!("No jobs");
+            return Ok(());
+        }
+
+        crate::println!("JOB   STATE      COMMAND");
+        crate::println!("---   -----      -------");
+
+        for job in &self.jobs {
+            let state_str = match job.state {
+                JobState::Running => "Running",
+                JobState::Stopped => "Stopped",
+                JobState::Done => "Done   ",
+            };
+
+            crate::println!("[{}]   {}  {}",
+                job.id, state_str, job.command);
+        }
+
+        Ok(())
+    }
+
+    /// Fg command - bring job to foreground
+    fn cmd_fg(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if self.jobs.is_empty() {
+            crate::println!("fg: no jobs");
+            return Err("no jobs");
+        }
+
+        let job_id = if args.is_empty() {
+            // Use most recent job
+            self.jobs.last().unwrap().id
+        } else {
+            // Parse job ID
+            match args[0].parse::<usize>() {
+                Ok(id) => id,
+                Err(_) => {
+                    crate::println!("fg: invalid job id");
+                    return Err("invalid job id");
+                }
+            }
+        };
+
+        // Find the job
+        if let Some(job) = self.jobs.iter_mut().find(|j| j.id == job_id) {
+            if job.state == JobState::Done {
+                crate::println!("fg: job [{}] already done", job_id);
+                return Err("job done");
+            }
+
+            crate::println!("{}", job.command);
+            job.state = JobState::Running;
+
+            // In a real OS, we would wait for the job to complete
+            crate::println!("Note: Job control simulated (job would run in foreground)");
+
+            Ok(())
+        } else {
+            crate::println!("fg: no such job [{}]", job_id);
+            Err("no such job")
+        }
+    }
+
+    /// Bg command - resume job in background
+    fn cmd_bg(&mut self, args: &[&str]) -> Result<(), &'static str> {
+        if self.jobs.is_empty() {
+            crate::println!("bg: no jobs");
+            return Err("no jobs");
+        }
+
+        let job_id = if args.is_empty() {
+            // Use most recent stopped job
+            self.jobs.iter()
+                .filter(|j| j.state == JobState::Stopped)
+                .last()
+                .map(|j| j.id)
+                .unwrap_or_else(|| self.jobs.last().unwrap().id)
+        } else {
+            // Parse job ID
+            match args[0].parse::<usize>() {
+                Ok(id) => id,
+                Err(_) => {
+                    crate::println!("bg: invalid job id");
+                    return Err("invalid job id");
+                }
+            }
+        };
+
+        // Find the job
+        if let Some(job) = self.jobs.iter_mut().find(|j| j.id == job_id) {
+            if job.state == JobState::Done {
+                crate::println!("bg: job [{}] already done", job_id);
+                return Err("job done");
+            }
+
+            crate::println!("[{}] {} &", job.id, job.command);
+            job.state = JobState::Running;
+
+            // In a real OS, the job would continue running
+            crate::println!("Note: Job control simulated (job would continue in background)");
+
+            Ok(())
+        } else {
+            crate::println!("bg: no such job [{}]", job_id);
+            Err("no such job")
+        }
+    }
         crate::println!("Reboot functionality not yet implemented");
         crate::println!("Note: Requires ACPI shutdown/reset or keyboard controller reset");
+        crate::println!("For now, please restart the VM manually");
         Err("not implemented")
     }
 
