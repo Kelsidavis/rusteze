@@ -4,3 +4,4 @@ Cargo.lock
 *.rmeta
 .aider*
 !.aider.conf.yml
+dev.log
