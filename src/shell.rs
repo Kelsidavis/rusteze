@@ -45,6 +45,21 @@ impl EnvironmentVariables {
 pub struct Shell {
     env: EnvironmentVariables,
     cwd: String,
+    /// Command history buffer (circular, max 100 commands)
+    #[allow(dead_code)]
+    history: Vec<String>,
+    /// Current position in history (-1 = not browsing)
+    #[allow(dead_code)]
+    history_pos: isize,
+    /// Maximum history size
+    #[allow(dead_code)]
+    max_history: usize,
+    /// Current input line being edited
+    #[allow(dead_code)]
+    current_line: String,
+    /// Cursor position in current line
+    #[allow(dead_code)]
+    cursor_pos: usize,
 }
 
 impl Shell {
@@ -53,7 +68,242 @@ impl Shell {
         Self {
             env: EnvironmentVariables::new(),
             cwd: String::from("/"),
+            history: Vec::new(),
+            history_pos: -1,
+            max_history: 100,
+            current_line: String::new(),
+            cursor_pos: 0,
         }
+    }
+
+    /// Add command to history
+    #[allow(dead_code)]
+    fn add_to_history(&mut self, cmd: &str) {
+        // Don't add empty commands or duplicates of the last command
+        if cmd.is_empty() {
+            return;
+        }
+
+        if let Some(last) = self.history.last() {
+            if last == cmd {
+                return;
+            }
+        }
+
+        self.history.push(cmd.to_string());
+
+        // Keep history at max size
+        if self.history.len() > self.max_history {
+            self.history.remove(0);
+        }
+    }
+
+    /// Navigate history (delta: -1 for up, +1 for down)
+    #[allow(dead_code)]
+    pub fn history_navigate(&mut self, delta: isize) -> Option<String> {
+        if self.history.is_empty() {
+            return None;
+        }
+
+        // Calculate new position
+        let new_pos = if self.history_pos == -1 {
+            // Start browsing from the end
+            if delta < 0 {
+                (self.history.len() as isize) - 1
+            } else {
+                return None;
+            }
+        } else {
+            self.history_pos + delta
+        };
+
+        // Bounds checking
+        if new_pos < 0 {
+            // At the beginning, can't go further back
+            return Some(self.history[self.history_pos as usize].clone());
+        } else if new_pos >= self.history.len() as isize {
+            // Past the end, return to current line
+            self.history_pos = -1;
+            return Some(self.current_line.clone());
+        }
+
+        self.history_pos = new_pos;
+        Some(self.history[new_pos as usize].clone())
+    }
+
+    /// Move cursor left/right in current line
+    #[allow(dead_code)]
+    pub fn move_cursor(&mut self, delta: isize) -> usize {
+        let new_pos = (self.cursor_pos as isize) + delta;
+        let line_len = self.current_line.len() as isize;
+
+        if new_pos < 0 {
+            self.cursor_pos = 0;
+        } else if new_pos > line_len {
+            self.cursor_pos = self.current_line.len();
+        } else {
+            self.cursor_pos = new_pos as usize;
+        }
+
+        self.cursor_pos
+    }
+
+    /// Insert character at cursor position
+    #[allow(dead_code)]
+    pub fn insert_char(&mut self, ch: char) {
+        self.current_line.insert(self.cursor_pos, ch);
+        self.cursor_pos += 1;
+    }
+
+    /// Delete character before cursor (backspace)
+    #[allow(dead_code)]
+    pub fn delete_char(&mut self) -> bool {
+        if self.cursor_pos > 0 {
+            self.current_line.remove(self.cursor_pos - 1);
+            self.cursor_pos -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get current line being edited
+    #[allow(dead_code)]
+    pub fn get_current_line(&self) -> &str {
+        &self.current_line
+    }
+
+    /// Get cursor position
+    #[allow(dead_code)]
+    pub fn get_cursor_pos(&self) -> usize {
+        self.cursor_pos
+    }
+
+    /// Clear current line
+    #[allow(dead_code)]
+    pub fn clear_current_line(&mut self) {
+        self.current_line.clear();
+        self.cursor_pos = 0;
+        self.history_pos = -1;
+    }
+
+    /// Set current line (used for history navigation)
+    #[allow(dead_code)]
+    pub fn set_current_line(&mut self, line: String) {
+        self.current_line = line;
+        self.cursor_pos = self.current_line.len();
+    }
+
+    /// Complete current line and execute
+    #[allow(dead_code)]
+    pub fn complete_and_execute(&mut self) -> Result<(), &'static str> {
+        let line = self.current_line.clone();
+
+        // Add to history before clearing
+        self.add_to_history(&line);
+
+        // Reset line state
+        self.clear_current_line();
+
+        // Execute the command
+        self.execute_line(&line)
+    }
+
+    /// Tab completion - complete command or file path
+    #[allow(dead_code)]
+    pub fn tab_complete(&mut self) -> Option<Vec<String>> {
+        let line = &self.current_line[..self.cursor_pos];
+
+        // Split into parts
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        if parts.is_empty() {
+            // Complete command at start of line
+            return self.complete_command("");
+        }
+
+        if parts.len() == 1 && !line.ends_with(' ') {
+            // Still typing first word - complete command
+            return self.complete_command(parts[0]);
+        }
+
+        // Completing a file/directory argument
+        let to_complete = if line.ends_with(' ') {
+            ""
+        } else {
+            parts.last().unwrap_or(&"")
+        };
+
+        self.complete_path(to_complete)
+    }
+
+    /// Complete command name
+    #[allow(dead_code)]
+    fn complete_command(&self, prefix: &str) -> Option<Vec<String>> {
+        let commands = [
+            "cat", "cd", "clear/cls", "echo", "export", "help",
+            "ls", "mkdir", "ps", "pwd", "reboot", "rm", "unset",
+        ];
+
+        let matches: Vec<String> = commands
+            .iter()
+            .filter(|cmd| cmd.starts_with(prefix))
+            .map(|s| s.to_string())
+            .collect();
+
+        if matches.is_empty() {
+            None
+        } else {
+            Some(matches)
+        }
+    }
+
+    /// Complete file/directory path
+    #[allow(dead_code)]
+    fn complete_path(&self, prefix: &str) -> Option<Vec<String>> {
+        // Determine the directory to search and the filename prefix
+        let (search_dir, file_prefix) = if prefix.contains('/') {
+            // Has directory component
+            let last_slash = prefix.rfind('/').unwrap();
+            let dir_part = &prefix[..=last_slash];
+            let file_part = &prefix[last_slash + 1..];
+            (self.resolve_path(dir_part), file_part.to_string())
+        } else {
+            // Just a filename in current directory
+            (self.cwd.clone(), prefix.to_string())
+        };
+
+        // Try to get directory listing
+        let tmpfs = crate::tmpfs::TMPFS.lock();
+
+        if let Ok(inode) = tmpfs.resolve_path(&search_dir) {
+            if let Ok(entries) = inode.list() {
+                let matches: Vec<String> = entries
+                    .into_iter()
+                    .filter(|name| name.starts_with(&file_prefix))
+                    .collect();
+
+                if matches.is_empty() {
+                    return None;
+                } else {
+                    return Some(matches);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Apply tab completion to current line
+    #[allow(dead_code)]
+    pub fn apply_completion(&mut self, completion: &str) {
+        // Find the word to replace at cursor position
+        let before_cursor = &self.current_line[..self.cursor_pos];
+        let last_space = before_cursor.rfind(' ').map(|i| i + 1).unwrap_or(0);
+
+        // Replace from last space to cursor with completion
+        self.current_line.replace_range(last_space..self.cursor_pos, completion);
+        self.cursor_pos = last_space + completion.len();
     }
 
     /// Parse and execute a command line

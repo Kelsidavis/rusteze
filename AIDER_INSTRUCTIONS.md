@@ -310,10 +310,21 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] `rm <file>` - remove file (stub: not yet implemented, requires tmpfs.remove()) ✓
 - [x] `reboot` - reboot system (stub: not yet implemented, requires ACPI/keyboard reset) ✓
 
-**SHELL ADVANCED FEATURES (Future):**
-- [ ] Command history (store previous commands in buffer)
-- [ ] Arrow key editing (up/down for history, left/right for cursor)
-- [ ] Tab completion (file/command completion)
+**SHELL ADVANCED FEATURES (Infrastructure Complete):**
+- [x] Command history (store previous commands in buffer)
+  - Circular buffer with max 100 commands
+  - Automatic deduplication (ignores consecutive duplicates)
+  - Full API: add_to_history(), history_navigate()
+- [x] Arrow key editing (up/down for history, left/right for cursor)
+  - history_navigate(delta) for up/down navigation
+  - move_cursor(delta) for left/right cursor movement
+  - insert_char(), delete_char() for editing at cursor position
+- [x] Tab completion (file/command completion)
+  - Command name completion for builtin commands
+  - File/directory path completion using VFS
+  - Smart context-aware completion (commands vs paths)
+  - Full API: tab_complete(), apply_completion()
+  - NOTE: These features are implemented and ready for keyboard integration
 - [ ] Pipes and redirection (|, >, <, >>)
 - [ ] Background processes (&)
 - [ ] Job control (fg, bg, jobs)
