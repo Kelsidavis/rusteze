@@ -328,9 +328,10 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
 
     # Qwen2.5-Coder 7B on RTX 5080 - 32k context with q8_0 KV cache
     # Context budget: 30k max input (set in .aider.model.metadata.json)
-    #   - 1k map tokens (reduced for large shell.rs file)
-    #   - 2k chat history (reduced for large files)
-    #   - ~27k available for actual file content (shell.rs + AIDER_INSTRUCTIONS.md)
+    #   - 512 map tokens (minimal - shell.rs is too large)
+    #   - 1k chat history (minimal for context)
+    #   - ~28.5k available for files aider explicitly adds
+    # Strategy: Start with NO files, let aider add only what it needs
     # 7B code-specialized model - faster than 14B, full 32k context
     log "INFO" "Starting aider session"
     timeout 900 aider \
@@ -338,20 +339,27 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         --no-stream \
         --yes \
         --auto-commits \
-        --map-tokens 1024 \
-        --max-chat-history-tokens 2048 \
+        --map-tokens 512 \
+        --max-chat-history-tokens 1024 \
         --env-file /dev/null \
         --encoding utf-8 \
         --show-model-warnings \
         --message "
 $BUILD_STATUS_MSG
-Work on the next unchecked task from AIDER_INSTRUCTIONS.md:
+
+Task from AIDER_INSTRUCTIONS.md (attempt #$((SAME_TASK_COUNT + 1))):
 $NEXT_TASKS
 
-After EVERY change: RUSTFLAGS=\"-D warnings\" cargo build --release
-When task is complete and build passes, edit AIDER_INSTRUCTIONS.md to mark [x] the task.
+Instructions:
+1. Add ONLY the files you need to /add (don't load all source files)
+2. Make your changes
+3. Run: RUSTFLAGS=\"-D warnings\" cargo build --release
+4. Fix any errors
+5. When build passes, edit AIDER_INSTRUCTIONS.md to mark [x] the task
+6. If you can't complete it or it's already done, mark [x] with a note
 
-IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, explain why.
+DO NOT load large files like src/shell.rs unless absolutely necessary - it will exceed context.
+Start with AIDER_INSTRUCTIONS.md only, add other files as needed.
 "
 
     EXIT_CODE=$?
