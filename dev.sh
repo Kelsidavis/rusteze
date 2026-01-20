@@ -364,11 +364,9 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
     log "INFO" "Starting aider session with files: $AIDER_FILES"
 
     # Use timeout to prevent indefinite hangs (15 minutes max per session)
-    # INCREASED context limits so aider can see more of the codebase
-    # Use --read mode to let aider pull in additional files as needed
+    # INCREASED context limits so aider can see more of the codebase via repo map
     timeout 900 aider \
         $AIDER_FILES \
-        --read src/*.rs \
         --model ollama/qwen3-30b-aider:32k \
         --no-stream \
         --yes \
