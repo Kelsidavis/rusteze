@@ -3,136 +3,210 @@
 use crate::vfs::{Vfs, Inode};
 use core::fmt;
 
-/// A simple shell environment.
+/// A simple shell.
 pub struct Shell {
-    /// The current working directory path (as a string).
+    /// The current working directory path (cwd).
     pub cwd: String,
 }
 
 impl fmt::Write for Shell {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        // This is just to satisfy the trait requirement
+        // Write to both VGA and serial output
+        let mut writer = Writer::new();
+        
+        if !s.is_empty() && !(self.cwd == "/") { 
+            match crate::vfs::VFS.get_file(self.cwd.as_str()) {
+                Some(file_ref) => file_ref.write(s),
+                None => self.print_error("Invalid directory"),
+            }
+        } else {
+            writer.write_string(s);
+        }
+
         Ok(())
     }
 }
 
-// Initialize a new shell with default settings and current working directory (cwd)
-impl Default for Shell {
-    fn default() -> Self {
+impl Shell {
+
+    /// Creates a new shell with default settings.
+    pub fn new() -> Self {
         let cwd = String::from("/");
+        
+        // Initialize the VFS
+        crate::vfs::VFS.init();
         
         Self { cwd }
     }
-}
 
-/// Execute the `cat` command to display file contents using VFS
-pub fn cmd_cat(args: &[&str]) -> Result<(), &'static str> {
-    if args.is_empty() {
-        return Err("Usage: cat <file>");
+
+    #[inline]
+    fn print_error(&self, msg: &str) {
+        self.write_str("Error: ").unwrap(); 
+        self.write_str(msg).unwrap();
+        self.write_str("\n").unwrap();
     }
 
-    let filename = args[0];
     
-    // Get current process's filesystem context (mocked for now)
-    let vfs_context = get_current_process_fs_context()
-        .ok_or("Failed to access VFS")?;
+    /// Displays the contents of a file.
+    pub fn cmd_cat(&mut self, args: &[&str]) -> fmt::Result {
 
-    match vfs_context.open(filename, false) {
-        Ok(inode_ref) => {
-            // Read the entire content of the file into a string buffer
-            let mut buf: Vec<u8> = vec![0; 1024];
+        if args.is_empty() || (args.len()==1 && args[0].is_empty()) { 
+            return Err(fmt::Error);
+        }
             
-            loop {
-                match inode_ref.read(&mut buf) {
-                    Some(nbytes) if nbytes > 0 => {
-                        for i in 0..nbytes {
-                            print!("{}", buf[i] as char);
-                        }
-                        
-                        // Reset buffer
-                        buf = vec![0; 1024];
-                    },
-                    
-                    _ => break, // End-of-file reached or error
-                };
-            }
-
-        },
+        let filename = &args[0];
         
-        Err(_) => return Err(&format!("File not found: {}", filename)),
-    };
+        // Check for relative path
+        let full_path = self.resolve_relative_path(filename);
 
-    Ok(())
-}
+        match crate::vfs::VFS.get_file(&full_path) {
+            Some(file_ref) => {
 
-/// Execute the `ls` command to list directory contents using VFS  
-pub fn cmd_ls(args: &[&str]) -> Result<(), &'static str> {
-    let dir_path = if args.is_empty() { 
-        String::from("/")
-    } else { 
-        args[0].to_string()
-    };
-
-    // Get current process's filesystem context
-    let vfs_context = get_current_process_fs_context()
-        .ok_or("Failed to access VFS")?;
-
-    match vfs_context.open(&dir_path, false) {
-        Ok(dir_inode_ref) => {
-
-            if !dir_inode_ref.is_directory() { 
-                return Err(&format!("Not a directory: {}", dir_path));
-            }
-
-            // Read the contents of the directory
-            let entries = match dir_inode_ref.readdir() {
-                Some(entries) => entries,
-                
-                None => return Err("Error reading directory"),
-            };
-
-            for entry in &entries {
-                print!("{}", &entry.name);
-                
-                if matches!(entry.file_type, crate::procfs::ProcFileType::Directory)
-                    || (matches!(entry.file_type, crate::procfs::ProcFileType::MemInfo) && !dir_path.ends_with("/meminfo"))
-                {
-                    // Add trailing slash for directories
-                    print!("/");
+                if file_ref.is_directory() { 
+                    return Err(fmt::Error);
                 }
                 
-                println!("");  // New line after each entry
-            }
+                let mut buffer: [u8; 1024] = [0; 1024];
+                
+                loop {
+                    
+                    match file_ref.read(&mut buffer, &full_path) {
+                        Ok(bytes_read) => {
 
-        },
+                            if bytes_read == 0 { break } // End of file
+
+                            self.write_str(core::str::from_utf8_unchecked(&buffer[..bytes_read])).unwrap();
+                        
+                        },
+                        Err(_) => return Err(fmt::Error),
+                    }
+                }
+
+            }, 
+            None => {
+                
+                let error_msg = format!("File not found: {}", filename);
+                self.print_error(error_msg.as_str());
+            }  
+        };
         
-        Err(_) => return Err(&format!("Directory not found: {}", dir_path)),
-    };
-
-    Ok(())
-}
-
-/// Execute the `pwd` command to display current working directory path (cwd)
-pub fn cmd_pwd(args: &[&str]) -> Result<(), &'static str> {
-    
-    // Validate no arguments are passed
-    if !args.is_empty() { 
-        return Err("Usage: pwd");
+        Ok(())
     }
-    
-    println!("{}", &get_current_cwd());
-    Ok(())
-}
 
-// Helper function to get current process's VFS context (mocked for now)
-fn get_current_process_fs_context() -> Option<crate::vfs::Vfs> {
-    // In a real implementation, this would be passed from the kernel
-    Some(crate::vfs::Vfs { /* mock data */ })
-}
 
-// Helper function to retrieve current working directory path string  
-fn get_current_cwd() -> String {
-    let cwd = "/".to_string();  // Mocked value for now
     
-    return cwd;
+    /// Lists the contents of a directory.
+    pub fn cmd_ls(&mut self, args: &[&str]) -> fmt::Result {
+
+        // Default to current working dir
+        let path = if !args.is_empty() { &args[0] } else { "." };
+
+        
+        match crate::vfs::VFS.get_file(path) {
+            Some(file_ref) => {
+
+
+                if file_ref.is_directory() == false {
+                    self.print_error("Not a directory");
+                    return Err(fmt::Error);
+                }
+                
+                // Get the list of entries
+                let mut dir_entries = Vec::<String>::new();
+        
+                match crate::vfs::VFS.list_dir(path, &mut dir_entries) { 
+                    
+                    Ok(_) => {},  
+                    Err(e) => {
+                        self.print_error("Failed to read directory");
+                        return Err(fmt::Error);
+                    }
+                
+                };
+            
+                // Sort entries alphabetically
+                dir_entries.sort();
+        
+                for entry in dir_entries.iter() {
+
+                    let mut line = String::new();
+
+                    
+                    if crate::vfs::VFS.get_file(entry).unwrap().is_directory() {
+                        
+                        self.write_str(&format!("d{}", &entry)).unwrap(); 
+                
+                    } else { 
+
+                        // Check file size
+                        match crate::vfs::VFS.get_file_size(entry) {
+
+                            Ok(size_bytes) =>  line = format!("{}",size_bytes),
+                            
+                            Err(_) => return Err(fmt::Error)
+                        
+                        }
+                    
+                        self.write_str(&format!(" {}", &entry)).unwrap();
+                    }
+
+                } // end for loop
+                
+            }, 
+            None => {
+                
+                let error_msg = format!("Directory not found: {}", path);
+                self.print_error(error_msg.as_str());
+            }  
+        };
+        
+        Ok(())
+    }
+
+
+    
+    /// Prints the current working directory.
+    pub fn cmd_pwd(&mut self) -> fmt::Result {
+
+        // Check if cwd is valid
+        match crate::vfs::VFS.get_file(self.cwd.as_str()) {
+            
+            Some(file_ref) => { 
+                
+                let mut path = String::new();
+        
+                for c in file_ref.name.chars() {
+                    path.push(c);
+                    
+                    self.write_str(&path).unwrap(); // Write each character to output
+                }
+    
+            },
+            None => return Err(fmt::Error)
+        }
+
+        Ok(())
+    }
+
+
+    /// Resolves a relative path into an absolute one.
+    fn resolve_relative_path(&self, filename: &str) -> String {
+        
+        if !filename.starts_with("/") { // Relative path
+            
+            let mut full_path = self.cwd.clone();
+            
+            match crate::vfs::VFS.get_file(filename).unwrap().is_directory() {
+
+                true =>  return format!("{}/{}",full_path,filename),
+                
+                false => return filename.to_string(),
+        
+        }
+    
+    } else {
+       return filename.to_string(); // Absolute path
+   }
+
 }
