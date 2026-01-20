@@ -156,16 +156,16 @@ CUDA_VISIBLE_DEVICES=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nohup py
 VLLM_PID=$!
 log "INFO" "vLLM server started with PID $VLLM_PID"
 
-# Wait for vLLM to be ready
-echo "Waiting for vLLM server to start..."
-for attempt in {1..60}; do
+# Wait for vLLM to be ready (v1 engine takes 5-10 min to compile first time)
+echo "Waiting for vLLM server to start (may take 5-10 minutes for first compilation)..."
+for attempt in {1..600}; do
     if curl -s "$VLLM_HOST/v1/models" > /dev/null 2>&1; then
         echo "✓ vLLM server is ready"
         log "INFO" "vLLM server ready after $attempt seconds"
         break
     fi
-    if [ $attempt -eq 60 ]; then
-        echo "✗ vLLM server failed to start after 60 seconds"
+    if [ $attempt -eq 600 ]; then
+        echo "✗ vLLM server failed to start after 10 minutes"
         log "ERROR" "vLLM server failed to start"
         tail -50 vllm.log
         exit 1
