@@ -21,7 +21,7 @@ pub struct Shell {}
 impl Shell {
     /// Create and return an instance of the shell with default environment variables.
     pub fn new() -> Self {
-        let mut env = EnvironmentVariables { vars: [None; 16];
+        let mut env = EnvironmentVariables { vars: [None; 16] };
         
         // Initialize some standard environment variables
         env.vars[0] = Some(("PATH".to_string(), "/bin:/usr/bin".to_string()));
