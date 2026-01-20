@@ -548,6 +548,10 @@ IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, 
 Please investigate whether the task is actually done, needs clarification, or should be skipped."
         fi
 
+        # Kill any existing Claude processes before starting a new one
+        pkill -9 -f "claude --print" 2>/dev/null || true
+        sleep 1
+
         # Run Claude non-interactively with --print and skip permissions
         # --dangerously-skip-permissions allows file edits and bash without prompts
         timeout 300 claude --print --dangerously-skip-permissions "
@@ -573,6 +577,14 @@ Work autonomously until the task is resolved.
 "
         CLAUDE_EXIT=$?
         log "INFO" "Claude exited with code $CLAUDE_EXIT"
+
+        # If Claude timed out, ensure cleanup
+        if [ $CLAUDE_EXIT -eq 124 ]; then
+            echo "⚠ Claude timed out after 5 minutes, killing any remaining processes..."
+            log "WARN" "Claude timed out (5 min limit)"
+            pkill -9 -f "claude --print" 2>/dev/null || true
+            sleep 1
+        fi
 
         # Verify Claude actually made changes (anti-hallucination check)
         FILES_AFTER=$(find src -name "*.rs" -exec md5sum {} \; 2>/dev/null | sort)
@@ -635,6 +647,10 @@ Work autonomously until the task is resolved.
             echo "⚠ Sanity check found build errors - calling Claude haiku to fix..."
             log "WARN" "Sanity check failed, calling haiku"
             STAT_CLAUDE_CALLS=$((STAT_CLAUDE_CALLS + 1))
+
+            # Kill any existing Claude processes before starting
+            pkill -9 -f "claude --print" 2>/dev/null || true
+            sleep 1
 
             # Run haiku non-interactively
             timeout 120 claude --print --dangerously-skip-permissions --model haiku "
@@ -707,6 +723,10 @@ CRITICAL: You MUST resolve this stuck loop. Either:
 
         # Snapshot before planning
         INSTRUCTIONS_BEFORE=$(md5sum AIDER_INSTRUCTIONS.md 2>/dev/null)
+
+        # Kill any existing Claude processes before starting
+        pkill -9 -f "claude --print" 2>/dev/null || true
+        sleep 1
 
         timeout 600 claude --print --dangerously-skip-permissions "
 You are the visionary architect and strategic planner for RustOS - a hobby OS kernel written in Rust.
