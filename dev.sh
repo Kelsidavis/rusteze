@@ -176,7 +176,7 @@ load_model() {
 
         # Use timeout on curl to prevent hanging
         if timeout $timeout_secs curl -s http://localhost:11434/api/generate -d '{
-          "model": "qwen2.5-coder:32k",
+          "model": "qwen2.5-coder:7b-32k",
           "prompt": "hi",
           "stream": false,
           "options": {"num_predict": 1}
@@ -188,7 +188,7 @@ load_model() {
             echo "Warming up model..."
             log "INFO" "Warming up model KV cache"
             timeout 120 curl -s http://localhost:11434/api/generate -d '{
-              "model": "qwen2.5-coder:32k",
+              "model": "qwen2.5-coder:7b-32k",
               "prompt": "You are a coding assistant. Implement the next feature.",
               "stream": false,
               "options": {"num_predict": 20}
@@ -326,16 +326,16 @@ After fixing: RUSTFLAGS=\"-D warnings\" cargo build --release
         fi
     fi
 
-    # Qwen2.5-Coder 14B on RTX 5080 - 32k context with q8_0 KV cache
+    # Qwen2.5-Coder 7B on RTX 5080 - 32k context with q8_0 KV cache
     # Context budget: 26k max input (set in .aider.model.metadata.json)
     #   - 2k map tokens (repo structure + file summaries)
     #   - 4k chat history (conversation memory)
     #   - ~20k available for actual file content
-    # Specialized code model - better at complex tasks than Llama 8B
+    # 7B code-specialized model - faster than 14B, full 32k context
     log "INFO" "Starting aider session"
     timeout 900 aider \
         AIDER_INSTRUCTIONS.md \
-        --model ollama/qwen2.5-coder:32k \
+        --model ollama/qwen2.5-coder:7b-32k \
         --no-stream \
         --yes \
         --auto-commits \
@@ -381,7 +381,7 @@ IMPORTANT: This is attempt #$((SAME_TASK_COUNT + 1)). If you can't complete it, 
         # Explicitly unload model from VRAM before killing ollama
         echo "Unloading model from VRAM..."
         curl -s -X DELETE http://localhost:11434/api/generate \
-            -d '{"model":"qwen2.5-coder:32k","keep_alive":0}' \
+            -d '{"model":"qwen2.5-coder:7b-32k","keep_alive":0}' \
             --max-time 5 2>/dev/null || true
         sleep 2
 
