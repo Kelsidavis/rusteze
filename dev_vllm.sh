@@ -32,7 +32,8 @@ PLANNING_INTERVAL=20  # Run planning session every N sessions
 VLLM_HOST="http://localhost:8000"
 # Qwen2.5-Coder-14B-Instruct: 2x smarter than 7B, fits in ~7-8GB VRAM
 # Leaves room for ~24k context (shell.rs is 1559 lines = ~12k tokens)
-VLLM_MODEL="Qwen/Qwen2.5-Coder-14B-Instruct"
+# Use 7B model - 14B OOMs with v1 engine's aggressive allocation
+VLLM_MODEL="Qwen/Qwen2.5-Coder-7B-Instruct"
 
 # Log function
 log() {
@@ -137,17 +138,19 @@ done
 echo "Starting vLLM server..."
 log "INFO" "Starting vLLM server on port 8000"
 
-CUDA_VISIBLE_DEVICES=1 VLLM_USE_V1=0 nohup python3 -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nohup python3 -m vllm.entrypoints.openai.api_server \
     --model "$VLLM_MODEL" \
     --host 0.0.0.0 \
     --port 8000 \
     --dtype bfloat16 \
     --max-model-len 32768 \
-    --gpu-memory-utilization 0.80 \
-    --max-num-seqs 16 \
+    --gpu-memory-utilization 0.70 \
+    --max-num-seqs 32 \
     --disable-log-requests \
     --trust-remote-code \
     --tensor-parallel-size 1 \
+    --enable-chunked-prefill \
+    --max-num-batched-tokens 4096 \
     > vllm.log 2>&1 &
 
 VLLM_PID=$!
@@ -316,7 +319,7 @@ Work autonomously until the task is resolved.
     # 14B is 2x smarter than 7B, should reduce hallucinations
     log "INFO" "Starting aider session"
     timeout 900 aider \
-        --model openai/Qwen/Qwen2.5-Coder-14B-Instruct \
+        --model openai/Qwen/Qwen2.5-Coder-7B-Instruct \
         --openai-api-base "$VLLM_HOST/v1" \
         --openai-api-key "dummy" \
         --no-stream \
