@@ -1904,9 +1904,21 @@ impl Shell {
 
     /// Resolve a path (handle relative paths)
     fn resolve_path(&self, path: &str) -> String {
+        // Handle tilde expansion first
+        let path = if path.starts_with("~/") {
+            // Expand ~/ to home directory
+            let home = self.env.get("HOME").map(|s| s.as_str()).unwrap_or("/home/user");
+            format!("{}{}", home, &path[1..])
+        } else if path == "~" {
+            // Expand ~ alone to home directory
+            self.env.get("HOME").map(|s| s.clone()).unwrap_or_else(|| "/home/user".to_string())
+        } else {
+            path.to_string()
+        };
+
         if path.starts_with('/') {
             // Absolute path
-            path.to_string()
+            path
         } else {
             // Relative path
             if self.cwd == "/" {

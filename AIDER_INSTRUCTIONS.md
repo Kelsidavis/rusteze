@@ -349,21 +349,21 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] Glob expansion (*.txt, [a-z]?.log)
 - [x] Brace expansion ({a,b,c}, {1..10})
 - [x] Arithmetic expansion ($((2+2)))
-- [ ] Tilde expansion (~/ for home directory)
+- [x] Tilde expansion (~/ for home directory)
 
 ## Phase 7.5: Basic System Utilities
 **Goal**: Essential command-line tools for shell interaction
 
-- [ ] `cat` - Concatenate and display files
-  - Read from VFS and output to stdout
-  - Support multiple files
-  - Line numbering option (-n)
-- [ ] `ls` - List directory contents
-  - Integration with VFS readdir
-  - Long format (-l) with file sizes
-  - Human-readable sizes (-h)
-  - Color output for file types
-  - Hidden file support (-a)
+- [x] `cat` - Concatenate and display files (implemented as shell builtin)
+  - Read from VFS and output to stdout ✓
+  - Support multiple files (TODO: extend to multiple files)
+  - Line numbering option (-n) (TODO)
+- [x] `ls` - List directory contents (implemented as shell builtin)
+  - Integration with VFS readdir ✓
+  - Long format (-l) with file sizes (TODO)
+  - Human-readable sizes (-h) (TODO)
+  - Color output for file types (TODO)
+  - Hidden file support (-a) (TODO)
 - [ ] `mkdir` / `rmdir` - Directory management
   - Create directories with VFS
   - Remove empty directories
