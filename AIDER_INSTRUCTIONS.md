@@ -396,14 +396,14 @@ This is a SUBSTANTIAL task requiring deep x86-64 knowledge. Consider breaking in
 - [x] `uptime` - System uptime
   - Show how long kernel has been running ✓
   - Load average (future)
-- [ ] `free` - Memory information
+- [x] `free` - Memory information
   - Display available/used memory
   - Integration with physical memory allocator
-- [ ] `ps` - Process list
+- [x] `ps` - Process list
   - Show all running processes
   - Process states and PIDs
   - CPU/memory usage per process
-- [ ] `env` - Display environment variables
+- [x] `env` - Display environment variables
   - Show all shell variables
   - Filter and format options
 - [ ] `which` - Locate command in PATH

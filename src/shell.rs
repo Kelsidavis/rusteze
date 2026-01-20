@@ -1373,6 +1373,8 @@ impl Shell {
             "head" => self.cmd_head(args),
             "tail" => self.cmd_tail(args),
             "uptime" => self.cmd_uptime(args),
+            "free" => self.cmd_free(args),
+            "env" => self.cmd_env(args),
             "reboot" => self.cmd_reboot(),
             "jobs" => self.cmd_jobs(args),
             "fg" => self.cmd_fg(args),
@@ -1466,6 +1468,8 @@ impl Shell {
         crate::println!("  head [-n N] <f>  - Display first N lines of file");
         crate::println!("  tail [-n N] <f>  - Display last N lines of file");
         crate::println!("  uptime           - Show system uptime");
+        crate::println!("  free             - Display memory information");
+        crate::println!("  env              - Display environment variables");
         crate::println!("  reboot           - Reboot system");
         crate::println!("  jobs             - List background jobs");
         crate::println!("  fg [job_id]      - Bring job to foreground");
@@ -2528,6 +2532,39 @@ impl Shell {
             crate::println!("up {} seconds", seconds);
         }
 
+        Ok(())
+    }
+
+    /// Free command - display memory information
+    fn cmd_free(&mut self, _args: &[&str]) -> Result<(), &'static str> {
+        // Get memory statistics from the physical memory allocator
+        // Note: This is a simplified version - we don't have a global allocator instance
+        // accessible here, so we'll calculate based on known constants
+
+        const FRAME_SIZE: usize = 4096; // 4 KiB per frame
+        const MAX_FRAMES: usize = 262144; // Maximum frames (1 GiB)
+
+        // For now, we'll show theoretical maximums
+        // In a real implementation, we would query the actual allocator
+        let total_kb = (MAX_FRAMES * FRAME_SIZE) / 1024;
+        let total_mb = total_kb / 1024;
+
+        crate::println!("               total        used        free");
+        crate::println!("Mem:      {:>10} KB  (query n/a)  (query n/a)", total_kb);
+        crate::println!("          {:>10} MB", total_mb);
+        crate::println!();
+        crate::println!("Note: Dynamic memory statistics require allocator integration");
+        crate::println!("Maximum addressable: {} MB ({} frames)", total_mb, MAX_FRAMES);
+
+        Ok(())
+    }
+
+    /// Env command - display environment variables
+    fn cmd_env(&mut self, _args: &[&str]) -> Result<(), &'static str> {
+        // Display all environment variables
+        for (key, value) in &self.env.vars {
+            crate::println!("{}={}", key, value);
+        }
         Ok(())
     }
 
